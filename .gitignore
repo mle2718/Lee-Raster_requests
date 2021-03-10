@@ -1,4 +1,5 @@
-
+*.tex
+*.pdf
 .Rproj.user
 *.Rproj
 /raw_data/*

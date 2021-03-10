@@ -1,0 +1,43 @@
+---
+title: "Herring Framework 7"
+author: Min-Yang Lee
+date: "`r format(Sys.time(), '%B %d, %Y')`" 
+output:
+  pdf_document:
+    keep_tex: TRUE
+    fig_caption: Yes
+  word_document: default
+  html_document: 
+   self_contained: TRUE
+   toc: TRUE
+   toc_float: TRUE
+classoption: notitlepage
+header-includes: 
+  \AtBeginDocument{\let\maketitle\relax}
+urlcolor: blue
+editor_options:
+  chunk_output_type: console
+compact-title: FALSE
+---
+
+
+```{r global_options, include=FALSE}  
+knitr::opts_chunk$set(echo=FALSE, warning = FALSE, error = FALSE, message = FALSE, comment = FALSE, cache = FALSE, progress = TRUE, verbose = FALSE, 
+											dpi = 600)
+options(tinytex.verbose = TRUE)
+# options(knitr.table.format = "latex")
+```	
+
+# This is the report for Herring Framework 7
+
+Here's some words.  
+
+
+You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+# Here's another section
+
