@@ -2,4 +2,5 @@
 *.pdf
 .Rproj.user
 *.Rproj
+*.Rhistory
 /raw_data/*
