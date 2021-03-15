@@ -1,10 +1,9 @@
 
 #READ in all the data
-FINAL=data.frame()
 for (yr in START.YEAR:END.YEAR)  {
-  
-  FINAL <- read.dbf(file = paste0(SSBdrive,"/Data/ExportAll",yr,".dbf"))
-  FINAL = subset(FINAL, select=-c(distance25, distance50, distance75, distance90, distance95))
+  #Don't need to read in, this is now FIN ?
+  FINAL <- FIN[which(FIN$Year==yr),]
+  #FINAL = subset(FINAL, select=-c(distance25, distance50, distance75, distance90, distance95))
   FINAL = FINAL[which(!is.na(FINAL[[FIELD]])),]
   FINAL = FINAL[which(FINAL[[FIELD]]!=0),]
   

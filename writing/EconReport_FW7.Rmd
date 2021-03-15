@@ -45,6 +45,7 @@ raster_manifest_location<-file.path(network_location,"home2/mlee/READ-SSB-Lee-Ra
 individual.raster.file="raster_manifest_2021-03-15.Rds"
 payloadRDS=file.path(raster_manifest_location,individual.raster.file)
 
+ML.OUTPUT.GEOTIFF.PATH<-file.path(network_location,"home2/mlee/READ-SSB-Lee-Raster_requests/geotiffs")
 
 PROJ.USE = CRS('+proj=aea +lat_1=28 +lat_2=42 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs +ellps=GRS80 +towgs84=0,0,0 ') 
 # Albers Equal Area conic (in meters)
@@ -78,7 +79,7 @@ if(!require(offshoreWind)) {
   install_github("dcorvi/offshoreWind")
   require(offshoreWind)}
 
-PKG <- c("foreign", "data.table", "dichromat", "RColorBrewer", "lattice", "scales",  "openxlsx", "sp", "rgdal", "raster",
+PKG <- c("foreign", "data.table", "dichromat", "RColorBrewer", "lattice", "scales",  "openxlsx", "sp", "rgdal", "raster","snowfall",
          "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4")
 for (p in PKG) {
   if(!require(p,character.only = TRUE)) {
@@ -1409,6 +1410,11 @@ MARGIN = c("MY_MARGIN") #Like "SPPNM","NESPP3","GEARCAT","FMP","STATE1" Comment 
 logical_subset<-quote(which(FINAL$NESPP3 %in% c(168))) 
 readable_name ="herring_only"
 my_margin_name<-quote(paste(FINAL$MONTH,readable_name, sep="_"))
+
+#You're going to have need a better name here. 
+export.geotiff.path = file.path(ML.OUTPUT.GEOTIFF.PATH,paste0("FW7_2019-12-10"))
+
+dir.create(export.geotiff.path, recursive=T)
 
 fl<-readRDS(payloadRDS)
 
