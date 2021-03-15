@@ -9,8 +9,6 @@ output:
    self_contained: TRUE
    toc: TRUE
    toc_float: TRUE
-classoption: notitlepage
-  \AtBeginDocument{\let\maketitle\relax}
 urlcolor: blue
 editor_options:
   chunk_output_type: console
@@ -36,9 +34,17 @@ desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
     network_location = "//net/"
   }
 
+START.YEAR<-2010
+END.YEAR<-2019
 
 offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
-wind_area_name = "Herring_FW7"
+wind_area_hard_name = "Herring Framework 7"
+
+raster_manifest_location<-file.path(network_location,"/home2/mlee/READ-SSB-Lee-Raster_requests/raw_data")
+
+individual.raster.file="individual_payload2021-03-15.Rds"
+payloadRDS=file.path(raster_manifest_location,individual.raster.file)
+
 
 # Prep data for this vignette must be created with getCallAreaEffort function in the package
 # This must be done seperately from within the vignette and the results placed in a seperate folder 
@@ -48,6 +54,13 @@ wind_area_name = "Herring_FW7"
 # All sections should be able to run independtly from each other after the revenue table is built
 
 ```	
+
+
+```{r construct raster manifest, eval = F}  
+source(file.path(network_location,"/home2/mlee/READ-SSB-Lee-Raster_requests/R_code/raster_manifest.R")
+```
+
+
 
 ```{r load_libraries_and_sign_in_to_Google, eval = T}  
 #------------------------------- Remember to enter a selection (1 or 0) to sign into Google in this code chunk -------------------------------# 
@@ -76,6 +89,9 @@ for (p in PKG) {
 
 ```
 
+
+
+
 ```{r get_area_overlays, eval = T} 
 # Take the overlap files in this code chunk using either an Oracle table or set the filepath to the folder where the .Rdata overlap files are  
 
@@ -97,6 +113,7 @@ oracle_overlap_table = "APSD.ALL_WEA_2008_2019@garfo_nefsc.world" #Oracle table 
  
 # shapefile_path = file.path(network_location,"home5/dcorvi/geret_data_request/HerringFW7")
 shapefile_path = "" # file path where a shapefile is to use for the map on the report
+shapefile_path = file.path(network_location,"home2","mlee","","READ-SSB-Lee-Raster_requests/input_data/Herring/Framework7")
 
 specific_wind_area = FALSE # this is for querying a specific wind area from a folder of multiple wind areas (for automating multiple reports)
 
@@ -179,7 +196,7 @@ output_folder_name = file.path(network_location,"home2/mlee/READ-SSB-Lee-Raster_
 # used for naming the folder where files will be saved
 
 # Plot colors
-assignedColors <- TRUE # assign unique colors for each margin in plots
+assignedColors <- FALSE # assign unique colors for each margin in plots
 
 paletteName1 <- "Accent" # which color palette to use for plots - check all available pallets with display.brewer.all()
 
@@ -362,8 +379,8 @@ if (any(gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", MGAREA), perl=TRUE) %in%
   pull(`Lease Name`)
   
 } else {
-  proj_area_name <- MGAREA 
-  wind_area_name <- MGAREA
+  proj_area_name <- wind_area_hard_name 
+  wind_area_name <- wind_area_hard_name
 }
 
 # MGAREA <- gsub(pattern=".shp$","", ignore.case = TRUE ,
@@ -1287,9 +1304,10 @@ lease_area_map <- ggplot(data = east_coast) +
 
 if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == FALSE & shapefile_path != "") {
   layer_name = unique(gsub(pattern="(.+)(.shp$)","\\1", ignore.case = TRUE , list.files(path=shapefile_path, pattern = "(.+)(.shp$)", ignore.case =TRUE, recursive=F, full.names=F)))
-  
-  if (length(layer_name)>1) {
+    
   crs <- CRS("+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0")
+
+  if (length(layer_name)>1) {
   
   file_list <- list.files(shapefile_path, pattern = "*shp$", full.names = TRUE)
   shapefile_list <- lapply(file_list, sf::read_sf)
@@ -1300,7 +1318,7 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
   # raster::aggregate(all_areas, dissolve = TRUE)
   
   count <- 0
-  rm(all_areas, extra_layer)
+  rm(all_areas)
   for (layer in layer_name) {
     if (count == 0) {
       all_areas <- rgdal::readOGR(dsn=shapefile_path, layer=layer, verbose=F)
@@ -1324,7 +1342,7 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
     all_areas <- rgdal::readOGR(dsn=shapefile_path, layer=layer_name, verbose=F)
   }
   
-  all_areas <- spTransform(all_areas, CRS=CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+  all_areas <- spTransform(all_areas, CRS=crs)
   lease_area <- sf::st_as_sf(all_areas)
   
   states <- map_data("state")
@@ -1356,7 +1374,7 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
   
   lease_area_map <- ggplot(data = east_coast) + 
     geom_polygon(aes(x = long, y = lat, group = group), fill = "#D1D1E0", color = "black") +
-    geom_sf(data = lease_area, fill= "red", color = "red") +
+    geom_sf(data = lease_area,  color = "green") +
     coord_sf(xlim = xlim, ylim = ylim) +
     ggtitle(wind_area_name) +
     theme(axis.title.y=element_blank(),
@@ -1369,7 +1387,41 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
 
 <!-- Run to here to get REVENUEFILE -->
 
+
+
+```{r mapme, include=FALSE}  
+#I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
+
+# 
+# REVENUEFILE <- as_tibble(merge(x=inside_areas_combined, y=FIN, 
+#                      by.x=c('IDNUM','Year'), by.y=c('IDNUM','YEAR'),
+#                      all.x=TRUE, all.y=TRUE)) # Old Merge
+
+FIELD = "QTYKEPT" #Like "REVENUE","QTYKEPT", "QTYDISC", or "CATCH"
+#SET margin to sum over
+MARGIN = c("MY_MARGIN") #Like "SPPNM","NESPP3","GEARCAT","FMP","STATE1" Comment out if want to sum over all margins in a year
+
+logical_subset<-quote(which(FINAL$NESPP3 %in% c(168))) 
+readable_name ="herring_only"
+my_margin_name<-quote(paste(FINAL$MONTH,readable_name, sep="_"))
+
+fl<-readRDS(payloadRDS)
+
+PROJ.USE = CRS('+proj=aea +lat_1=28 +lat_2=42 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs +ellps=GRS80 +towgs84=0,0,0 ') 
+# Albers Equal Area conic (in meters)
+
+BASE.RASTER = raster(file.path(SSBdrive,"Data","BASERASTER_AEA_2"))
+
+source(file.path(network_location,"/home2/mlee/READ-SSB-Lee-Raster_requests/R_code/step4_modfied_generic_aggregator_modified.R")
+
+
+
+
+```	
+
 <!-- Note: The HULLNUM/VESID variable is not used in this dataset to fill in the permit number for clam trips (which don't have a permit attached to the record in the SFCLAM database). This will introduce NA's to the data. -->
+
+
 
 <br>
 
@@ -1894,7 +1946,7 @@ lp <- ggplot(topFMP, aes(x = Year, y = yfa_land/1000000, fill = FMP)) +
   xlab(NULL) +
   ylab("Millions of Pounds") +
   # scale_y_continuous() +
-  scale_y_continuous(expand=expand_scale(mult=c(0,0.1))) + 
+  scale_y_continuous(expand=expansion(mult=c(0,0.1))) + 
   theme_bw() +
   # theme_ipsum() +
   coord_flip() +
@@ -1981,7 +2033,7 @@ rp <- ggplot(topFMP, aes(x = Year, y = yfa_rev/1000000, fill = FMP)) +
   xlab(NULL) +
   ylab("Revenue in Millions") +
   # scale_y_continuous(labels = dollar_format(prefix="$")) +
-  scale_y_continuous(expand=expand_scale(mult=c(0, 0.1))) +
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
   theme_bw() +
   # theme_ipsum() +
   coord_flip() +
@@ -2533,7 +2585,7 @@ lp <- ggplot(otherFMP, aes(x = Year, y = yfa_land/1000000, fill = FMP)) +
   xlab(NULL) +
   ylab("Millions of Pounds") +
   # scale_y_continuous() +
-  scale_y_continuous(expand=expand_scale(mult=c(0, 0.1))) + 
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) + 
   theme_bw() +
   # theme_ipsum() +
   coord_flip() +
@@ -2548,7 +2600,8 @@ lp <- ggplot(otherFMP, aes(x = Year, y = yfa_land/1000000, fill = FMP)) +
         # plot.title = element_text(hjust = 0.5, size=18))
         plot.title = element_text())
         # panel.border = element_rect(colour = "black", size=0))
-# lp
+# lp assignedColors=FALSE
+
 # if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
 if (assignedColors) {
   lp <- lp + uniqueOtherfmpScale
@@ -2636,7 +2689,7 @@ rp <- ggplot(otherFMP, aes(x = Year, y = yfa_rev/1000000, fill = FMP)) +
   xlab(NULL) +
   ylab("Revenue in Millions") +
   # scale_y_continuous(labels = dollar_format(prefix="$")) +
-  scale_y_continuous(expand=expand_scale(mult=c(0, 0.1))) +
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
   theme_bw() +
   # theme_ipsum() +
   coord_flip() +
@@ -2992,7 +3045,7 @@ lp <- ggplot(sSpeciesArea, aes(x = Year, y = yfa_land/1000000, fill=Species)) +
   xlab(NULL) +
   ylab("Millions of Pounds") +
   # scale_y_continuous() +
-  scale_y_continuous(expand=expand_scale(mult=c(0, 0.1))) + 
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) + 
   theme_bw() +
   # theme_ipsum() +
   coord_flip() +
@@ -3075,7 +3128,7 @@ rp <- ggplot(sSpeciesArea, aes(x = Year, y = yfa_rev/1000000, fill=Species)) +
   xlab(NULL) +
   ylab("Revenue in Millions") +
   # scale_y_continuous(labels = dollar_format(prefix="$")) +
-  scale_y_continuous(expand=expand_scale(mult=c(0, 0.1))) +
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
   theme_bw() +
   # theme_ipsum() +
   coord_flip() +
@@ -3362,7 +3415,7 @@ lp <- ggplot(sSpeciesArea, aes(x = Year, y = yfa_land/1000000, fill=Species)) +
   xlab(NULL) +
   ylab("Millions of Pounds") +
   # scale_y_continuous() +
-  scale_y_continuous(expand=expand_scale(mult=c(0, 0.1))) + 
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) + 
   theme_bw() +
   # theme_ipsum() +
   coord_flip() +
@@ -3445,7 +3498,7 @@ rp <- ggplot(sSpeciesArea, aes(x = Year, y = yfa_rev/1000000, fill=Species)) +
   xlab(NULL) +
   ylab("Revenue in Millions") +
   # scale_y_continuous(labels = dollar_format(prefix="$")) +
-  scale_y_continuous(expand=expand_scale(mult=c(0, 0.1))) +
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
   theme_bw() +
   # theme_ipsum() +
   coord_flip() +
@@ -3728,7 +3781,7 @@ lp <- ggplot(sGear_TypeArea, aes(x = Year, y = yfa_land/1000000, fill=Gear_Type)
   xlab(NULL) +
   ylab("Millions of Pounds") +
   # scale_y_continuous() +
-  scale_y_continuous(expand=expand_scale(mult=c(0, 0.1))) + 
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) + 
   theme_bw() +
   # theme_ipsum() +
   coord_flip() +
@@ -3812,7 +3865,7 @@ rp <- ggplot(sGear_TypeArea, aes(x = Year, y = yfa_rev/1000000, fill=Gear_Type))
   xlab(NULL) +
   ylab("Revenue in Millions") +
   # scale_y_continuous(labels = dollar_format(prefix="$")) +
-  scale_y_continuous(expand=expand_scale(mult=c(0, 0.1))) +
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
   theme_bw() +
   # theme_ipsum() +
   coord_flip() +
