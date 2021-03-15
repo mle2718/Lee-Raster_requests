@@ -40,11 +40,16 @@ END.YEAR<-2019
 offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
 wind_area_hard_name = "Herring Framework 7"
 
-raster_manifest_location<-file.path(network_location,"/home2/mlee/READ-SSB-Lee-Raster_requests/raw_data")
+raster_manifest_location<-file.path(network_location,"home2/mlee/READ-SSB-Lee-Raster_requests/raw_data")
 
-individual.raster.file="individual_payload2021-03-15.Rds"
+individual.raster.file="raster_manifest_2021-03-15.Rds"
 payloadRDS=file.path(raster_manifest_location,individual.raster.file)
 
+
+PROJ.USE = CRS('+proj=aea +lat_1=28 +lat_2=42 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs +ellps=GRS80 +towgs84=0,0,0 ') 
+# Albers Equal Area conic (in meters)
+
+BASE.RASTER = raster(file.path(network_location,"work5","socialsci","Geret_Rasters","Data","BASERASTER_AEA_2"))
 
 # Prep data for this vignette must be created with getCallAreaEffort function in the package
 # This must be done seperately from within the vignette and the results placed in a seperate folder 
@@ -1407,12 +1412,8 @@ my_margin_name<-quote(paste(FINAL$MONTH,readable_name, sep="_"))
 
 fl<-readRDS(payloadRDS)
 
-PROJ.USE = CRS('+proj=aea +lat_1=28 +lat_2=42 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs +ellps=GRS80 +towgs84=0,0,0 ') 
-# Albers Equal Area conic (in meters)
 
-BASE.RASTER = raster(file.path(SSBdrive,"Data","BASERASTER_AEA_2"))
-
-source(file.path(network_location,"/home2/mlee/READ-SSB-Lee-Raster_requests/R_code/step4_modfied_generic_aggregator_modified.R"))
+source(file.path(network_location,"home2/mlee/READ-SSB-Lee-Raster_requests/R_code/Step_4_generic_raster_aggregator.R"))
 
 
 
