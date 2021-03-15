@@ -1412,7 +1412,7 @@ PROJ.USE = CRS('+proj=aea +lat_1=28 +lat_2=42 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0
 
 BASE.RASTER = raster(file.path(SSBdrive,"Data","BASERASTER_AEA_2"))
 
-source(file.path(network_location,"/home2/mlee/READ-SSB-Lee-Raster_requests/R_code/step4_modfied_generic_aggregator_modified.R")
+source(file.path(network_location,"/home2/mlee/READ-SSB-Lee-Raster_requests/R_code/step4_modfied_generic_aggregator_modified.R"))
 
 
 
