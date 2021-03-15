@@ -1,7 +1,7 @@
 # R script to create folders for a project
 
-fmp<-"Herring"
-action<-"Framework7"
+fmp<-"RiverHerring"
+action<-"July2021"
 
 # Setup directories for R_code
 dir.create(file.path("R_code",fmp,action), recursive=TRUE)
