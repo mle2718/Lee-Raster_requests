@@ -16,60 +16,7 @@ compact-title: FALSE
 ---
 
 
-```{r global_options, include=FALSE}  
-knitr::opts_chunk$set(echo=FALSE, warning = FALSE, error = FALSE, message = FALSE, comment = FALSE, cache = FALSE, progress = TRUE, verbose = FALSE, 
-											dpi = 600)
-options(tinytex.verbose = TRUE)
-# options(knitr.table.format = "latex")
-
-# knit: (function(inputFile, encoding) { rmarkdown::render(inputFile, encoding = encoding, output_file = file.path(dirname(inputFile), 'myfile.pdf')) })
-
-# Different setups based on whether you are using Windows or Not-windows
-desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
-
-  if (desktopUse) { # set the root path of the network, based on whether on desktop or server
-    network_location = "//155.206.139.2/"
-    system("ipconfig", intern = TRUE)
-  } else {
-    network_location = "//net/"
-  }
-
-START.YEAR<-2010
-END.YEAR<-2019
-
-offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
-wind_area_hard_name = "Herring Framework 7"
-
-raster_manifest_location<-file.path(network_location,"home2/mlee/READ-SSB-Lee-Raster_requests/raw_data")
-
-individual.raster.file="raster_manifest_2021-03-15.Rds"
-payloadRDS=file.path(raster_manifest_location,individual.raster.file)
-
-ML.OUTPUT.GEOTIFF.PATH<-file.path(network_location,"home2/mlee/READ-SSB-Lee-Raster_requests/geotiffs")
-
-PROJ.USE = CRS('+proj=aea +lat_1=28 +lat_2=42 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs +ellps=GRS80 +towgs84=0,0,0 ') 
-# Albers Equal Area conic (in meters)
-
-BASE.RASTER = raster(file.path(network_location,"work5","socialsci","Geret_Rasters","Data","BASERASTER_AEA_2"))
-
-# Prep data for this vignette must be created with getCallAreaEffort function in the package
-# This must be done seperately from within the vignette and the results placed in a seperate folder 
-# because of the amount of time it takes for the function to run for each shape, which can take a couble of hours 
-# on the VENUS or MARS R servers or days on an 8 processor laptop, which also depends on the number and size of the requested shapefiles 
-
-# All sections should be able to run independtly from each other after the revenue table is built
-
-```	
-
-
-```{r construct raster manifest, eval = F}  
-source(file.path(network_location,"/home2/mlee/READ-SSB-Lee-Raster_requests/R_code/raster_manifest.R")
-```
-
-
-
-```{r load_libraries_and_sign_in_to_Google, eval = T}  
-#------------------------------- Remember to enter a selection (1 or 0) to sign into Google in this code chunk -------------------------------# 
+```{r global_options, include=FALSE}
 
 # ### install offshoreWind package from Github if needed
 if(!require(offshoreWind)) {
@@ -86,6 +33,97 @@ for (p in PKG) {
     install.packages(p)
     require(p,character.only = TRUE)}
 }
+#############################################################################
+#knitr options
+
+knitr::opts_chunk$set(echo=FALSE, warning = FALSE, error = FALSE, message = FALSE, comment = FALSE, cache = FALSE, progress = TRUE, verbose = FALSE, 
+											dpi = 600)
+options(tinytex.verbose = TRUE)
+# options(knitr.table.format = "latex")
+
+# knit: (function(inputFile, encoding) { rmarkdown::render(inputFile, encoding = encoding, output_file = file.path(dirname(inputFile), 'myfile.pdf')) })
+#############################################################################
+
+
+#############################################################################
+# figure out the OS 
+# Different setups based on whether you are using Windows or Not-windows
+desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
+
+  if (desktopUse) { # set the root path of the network, based on whether on desktop or server
+    network_location = "//155.206.139.2/"
+    system("ipconfig", intern = TRUE)
+  } else {
+    network_location = "//net/"
+  }
+#############################################################################
+
+#############################################################################
+# versioning options
+todaysdate <- as.Date(Sys.time())
+#############################################################################
+# Paths, names, and locations of inputs and outputs
+offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
+project_root_path<-file.path(network_location,"home2","mlee","READ-SSB-Lee-Raster_requests")
+wind_area_hard_name = "Herring Framework 7"
+
+raster_manifest_location<-file.path(project_root_path,"raw_data")
+individual.raster.file="raster_manifest_2021-03-15.Rds"
+payloadRDS=file.path(raster_manifest_location,individual.raster.file)
+
+root.geotiff.path<-file.path(project_root_path,"geotiffs","Herring","Framework7")
+#############################################################################
+
+
+#############################################################################
+# GIS options, you  probably shouldn't change these. 
+
+BASE.RASTER = raster(file.path(network_location,"work5","socialsci","Geret_Rasters","Data","BASERASTER_AEA_2"))
+PROJ.USE = CRS('+proj=aea +lat_1=28 +lat_2=42 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs +ellps=GRS80 +towgs84=0,0,0 ') 
+# Albers Equal Area conic (in meters)
+
+#############################################################################
+
+
+START.YEAR<-2010
+#START.YEAR<-2018
+END.YEAR<-2019
+
+
+
+# Prep data for this vignette must be created with getCallAreaEffort function in the package
+# This must be done seperately from within the vignette and the results placed in a seperate folder 
+# because of the amount of time it takes for the function to run for each shape, which can take a couble of hours 
+# on the VENUS or MARS R servers or days on an 8 processor laptop, which also depends on the number and size of the requested shapefiles 
+
+# All sections should be able to run independtly from each other after the revenue table is built
+
+```	
+
+
+```{r getcallArea, eval = F}  
+#Dennis ran this on March 11, 2021
+#Plopping this in here, so I know how to find it if I have to update
+getCallAreaEffort(raster_folder =
+    file.path(network_location,"work5/socialsci/Geret_Rasters/Data/individualrasters",
+    shapefile_f = file.path(network_location,"home5/dcorvi/geret_data_request/HerringFW7",
+    output_f = file.path(network_location,"home5/dcorvi/geret_data_request/HerringFW7_output_CW",
+    start = 2010,
+    end = 2019)
+```
+
+
+
+
+```{r construct raster manifest, eval = F}  
+source(file.path(project_root_path,"R_code/raster_manifest.R")
+```
+
+
+
+```{r load_libraries_and_sign_in_to_Google, eval = T}  
+#------------------------------- Remember to enter a selection (1 or 0) to sign into Google in this code chunk -------------------------------# 
+
 
 # During the first run the user will be prompted to complete the OAuth process by signing into a Google account through a browser and create a token for Google access
 # the token will expire after a few months - when this happens, the user will get an error and have to detach and reattache (i.e. detach("package:googlesheets4", unload = TRUE) then library(googlesheets4)) the package and should enter 0 when prompted for selection.
@@ -119,7 +157,7 @@ oracle_overlap_table = "APSD.ALL_WEA_2008_2019@garfo_nefsc.world" #Oracle table 
  
 # shapefile_path = file.path(network_location,"home5/dcorvi/geret_data_request/HerringFW7")
 shapefile_path = "" # file path where a shapefile is to use for the map on the report
-shapefile_path = file.path(network_location,"home2","mlee","","READ-SSB-Lee-Raster_requests/input_data/Herring/Framework7")
+shapefile_path = file.path(project_root_path,"input_data/Herring/Framework7")
 
 specific_wind_area = FALSE # this is for querying a specific wind area from a folder of multiple wind areas (for automating multiple reports)
 
@@ -198,11 +236,11 @@ save_files = "b" # either c("r","c","b","n") r = Save RData files, c = save csv 
 
 project_name = "TEST"  # description text that precedes the output file names
 
-output_folder_name = file.path(network_location,"home2/mlee/READ-SSB-Lee-Raster_requests/raw_data/Herring/Framework7")
+output_folder_name = file.path(project_root_path,"raw_data/Herring/Framework7")
 # used for naming the folder where files will be saved
 
 # Plot colors
-assignedColors <- FALSE # assign unique colors for each margin in plots
+assignedColors <- TRUE # assign unique colors for each margin in plots
 
 paletteName1 <- "Accent" # which color palette to use for plots - check all available pallets with display.brewer.all()
 
@@ -1395,36 +1433,156 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
 
 
 
-```{r mapme, include=FALSE}  
-#I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
-
-# 
-# REVENUEFILE <- as_tibble(merge(x=inside_areas_combined, y=FIN, 
-#                      by.x=c('IDNUM','Year'), by.y=c('IDNUM','YEAR'),
-#                      all.x=TRUE, all.y=TRUE)) # Old Merge
-
-FIELD = "QTYKEPT" #Like "REVENUE","QTYKEPT", "QTYDISC", or "CATCH"
-#SET margin to sum over
-MARGIN = c("MY_MARGIN") #Like "SPPNM","NESPP3","GEARCAT","FMP","STATE1" Comment out if want to sum over all margins in a year
-
-logical_subset<-quote(which(FINAL$NESPP3 %in% c(168))) 
-readable_name ="herring_only"
-my_margin_name<-quote(paste(FINAL$MONTH,readable_name, sep="_"))
-
-#You're going to have need a better name here. 
-export.geotiff.path = file.path(ML.OUTPUT.GEOTIFF.PATH,paste0("FW7_2019-12-10"))
-
-dir.create(export.geotiff.path, recursive=T)
-
+```{r prep_geotiffs1, include=FALSE, eval=TRUE}  
+# Read in the file attributes of the individual rasters.
 fl<-readRDS(payloadRDS)
 
 
-source(file.path(network_location,"home2/mlee/READ-SSB-Lee-Raster_requests/R_code/Step_4_generic_raster_aggregator.R"))
+#I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
+
+FIELD = "QTYKEPT" #Like "REVENUE","QTYKEPT", "QTYDISC", or "CATCH"
+#SET margin to sum over
+MARGIN = c("MY_MARGIN") #Like "SPPNM","NESPP3","GEARCAT","FMP","STATE1". Comment out if want to sum over all margins in a year.  I'm using the custom column called "MY_MARGIN", which I will define later.
+
+
+#Give the files and folders a pretty name.
+readable_name ="herring_only"
+
+logical_subset<-quote(which(FINALstack$NESPP3 %in% c(168) &FINALstack[[FIELD]]>=1)) 
+my_margin_name<-quote(paste(FINALstack$MONTH,readable_name, sep="_"))
 
 
 
+
+export.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"))
+dir.create(export.geotiff.path, recursive=T, showWarnings=FALSE)
+
+#############################################################################
+#############################################################################
+# You shouldn't have to make any changes to this block of code 
+# Create FINALstack by subsetting FIN.  Use the FIN data.table  
+
+# This construction first rows that match the logical. So, we only get rows where herring was retained.
+
+FINALstack=FIN
+FINALstack<-FINALstack[eval(logical_subset),]
+FINALstack = FINALstack[which(!is.na(FINALstack[[FIELD]])),]
+FINALstack = FINALstack[which(FINALstack[[FIELD]]!=0),]
+#THIS IS THE NAME OF MY MARGIN VARIABLE
+#FINAL$MY_MARGIN<-paste(FINAL$MONTH,readable_name, sep="_")
+
+
+FINALstack$MY_MARGIN<-eval(my_margin_name)
+
+
+#We want some information about FINALstack, by "MY_MARGIN"+ "YEAR"
+# Distinct permits, distinct trips, and total amount of FIELD
+FINALstack$FULL_MARGIN<-paste(FINALstack$MY_MARGIN, FINALstack$Year, sep="_")
+
+tsA<-FINALstack %>% 
+  group_by(FULL_MARGIN) %>%
+  mutate(unique_trips = n_distinct(IDNUM),
+         unique_permits = n_distinct(PERMIT),
+         )
+
+tsA<-tsA %>% 
+  group_by(FULL_MARGIN,Year,MONTH) %>%
+  summarize(unique_trips=first(unique_trips),
+            unique_permits=first(unique_permits),
+      total=sum(get(FIELD))
+         )
+tsA$readable_name<-readable_name
+
+tsA<-tsA[c("readable_name","FULL_MARGIN","Year","MONTH","unique_permits","unique_trips","total")]
+
+write.csv(tsA,file=file.path(export.geotiff.path,paste(readable_name,"summary_stats.csv")), row.names=FALSE)
+
+confid_prob<-tsA[(which(tsA$unique_permits<=2)),]
+if (nrow(confid_prob)>=1){
+  write.csv(confid_prob,file=file.path(export.geotiff.path,paste(readable_name,"confidential.csv")), row.names=FALSE)
+}
 
 ```	
+
+```{r makegeotiffs1, include=FALSE, eval=TRUE}  
+source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
+```	
+
+
+
+
+```{r make_geotiffs2, include=FALSE,eval=TRUE}   
+# Read in the file attributes of the individual rasters.
+
+#I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
+
+FIELD = "REVENUE" #Like "REVENUE","QTYKEPT", "QTYDISC", or "CATCH"
+#SET margin to sum over
+MARGIN = c("MY_MARGIN") #Like "SPPNM","NESPP3","GEARCAT","FMP","STATE1". Comment out if want to sum over all margins in a year.  I'm using the custom column called "MY_MARGIN", which I will define later.
+
+
+#Give the files and folders a pretty name.
+readable_name ="allrev_trips_catch168"
+
+logical_subset<-quote(which(FINALstack$NESPP3 %in% c(168) &FINALstack[[FIELD]]>=1)) 
+my_margin_name<-quote(paste(FINALstack$MONTH,readable_name, sep="_"))
+
+export.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"))
+dir.create(export.geotiff.path, recursive=T, showWarnings=FALSE)
+
+#############################################################################
+#############################################################################
+# You shouldn't have to make any changes to this block of code 
+# Create FINALstack by subsetting FIN.  Use the FIN data.table  
+FINALstack=FIN
+
+#This construction first keeps the unique TRIPIDs that match the logical (get positive revenue from herring).
+#Then, we retain all the catch records for those TRIPIDs
+IDs<-FINALstack[eval(logical_subset),]
+IDs<-unique(IDs$TRIPID)
+
+FINALstack = FINALstack[which(FINALstack$TRIPID%in%IDs),]
+FINALstack = FINALstack[which(!is.na(FINALstack[[FIELD]])),]
+FINALstack = FINALstack[which(FINALstack[[FIELD]]!=0),]
+#THIS IS THE NAME OF MY MARGIN VARIABLE
+#FINAL$MY_MARGIN<-paste(FINAL$MONTH,readable_name, sep="_")
+FINALstack$MY_MARGIN<-eval(my_margin_name)
+
+
+
+#We want some information about FINALstack, by "MY_MARGIN"+ "YEAR"
+# Distinct permits, distinct trips, and total amount of FIELD
+FINALstack$FULL_MARGIN<-paste(FINALstack$MY_MARGIN, FINALstack$Year, sep="_")
+
+tsA<-FINALstack %>% 
+  group_by(FULL_MARGIN) %>%
+  mutate(unique_trips = n_distinct(IDNUM),
+         unique_permits = n_distinct(PERMIT),
+         )
+
+tsA<-tsA %>% 
+  group_by(FULL_MARGIN,Year,MONTH) %>%
+  summarize(unique_trips=first(unique_trips),
+            unique_permits=first(unique_permits),
+      total=sum(get(FIELD))
+         )
+tsA$readable_name<-readable_name
+
+tsA<-tsA[c("readable_name","FULL_MARGIN","Year","MONTH","unique_permits","unique_trips","total")]
+
+write.csv(tsA,file=file.path(export.geotiff.path,paste(readable_name,"summary_stats.csv")), row.names=FALSE)
+
+confid_prob<-tsA[(which(tsA$unique_permits<=2)),]
+if (nrow(confid_prob)>=1){
+  write.csv(confid_prob,file=file.path(export.geotiff.path,paste(readable_name,"confidential.csv")), row.names=FALSE)
+}
+```	
+
+```{r makegeotiffs2, include=FALSE, eval=TRUE}  
+source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
+
+```	
+
 
 <!-- Note: The HULLNUM/VESID variable is not used in this dataset to fill in the permit number for clam trips (which don't have a permit attached to the record in the SFCLAM database). This will introduce NA's to the data. -->
 
@@ -1549,7 +1707,7 @@ top_five_fmp_names <- subset(REVENUEFILE, !is.na(FMP)) %>%
     npermits = sum(npermits, na.rm = T)) %>% 
   dplyr::rename("FMP"= FMP_CONF) %>% 
   dplyr::select(FMP, Year, Area, yfa_rev, yfa_land) %>% 
-  group_by(FMP, Area) %>% 
+  group_by(FMP) %>% 
   dplyr::summarize(
     allyrtotal_rev = sum(yfa_rev, na.rm = T),
     allyrtotal_land = sum(yfa_land, na.rm = T)) %>% 

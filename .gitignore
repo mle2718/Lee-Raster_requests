@@ -4,3 +4,4 @@
 *.Rproj
 *.Rhistory
 /raw_data/*
+/geotiffs/*

@@ -1,22 +1,12 @@
+# This script aggregates individual rasters together into a geotiff. I don't really know how it works.
 
-#READ in all the data
+
+#READ in the data.  
 for (yr in START.YEAR:END.YEAR)  {
-  #Don't need to read in, this is now FIN ?
-  FINAL <- FIN[which(FIN$Year==yr),]
+   #subset on year. I think the multicore part requires yearly.
+  FINAL <- FINALstack[which(FINALstack$Year==yr),]
   #FINAL = subset(FINAL, select=-c(distance25, distance50, distance75, distance90, distance95))
-  FINAL = FINAL[which(!is.na(FINAL[[FIELD]])),]
-  FINAL = FINAL[which(FINAL[[FIELD]]!=0),]
-  
-  #Pass in a previously defined "thing" logical_subset<-"which(FINAL$NESPP3 %in% c("212"))"
-  FINAL=FINAL[eval(logical_subset),]
-  
 
-  
-  #THIS IS THE NAME OF MY MARGIN VARIABLE
-  #FINAL$MY_MARGIN<-paste(FINAL$MONTH,readable_name, sep="_")
-  FINAL$MY_MARGIN<-eval(my_margin_name)
-  
-    
   for (MARG in MARGIN)  {
     
     RASTER_FILE = FINAL[which(FINAL$IDNUM%in%fl$IDNUM),]
