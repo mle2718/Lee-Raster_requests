@@ -74,6 +74,7 @@ payloadRDS=file.path(raster_manifest_location,individual.raster.file)
 
 root.geotiff.path<-file.path(project_root_path,"geotiffs","Herring","Framework7")
 root.image.path = file.path(project_root_path,"images","Herring","Framework7")
+root.table.path = file.path(project_root_path,"tables","Herring","Framework7")
 
 ML.GIS.PATH<-file.path(network_location,"home2", "mlee", "spatial data")
 
@@ -346,6 +347,9 @@ top_species_section = TRUE
 select_species_section = FALSE
 select_gear_section = TRUE
 fishery_dependence_section = TRUE
+
+select_gear_custom =TRUE
+
 trip_and_vessel_section = FALSE
 
 single_area_summaries = FALSE # force summary tables even if theres only one area
@@ -1643,7 +1647,6 @@ rm(tsA)
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 ```	
 
-
 ```{r secondary_aggregation, include=FALSE, eval=TRUE} 
 
 #################################################
@@ -1748,9 +1751,7 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 
 ```	
 
-
-
-```{r check_confidential_secondary_aggregation, include=FALSE, eval=TRUE} 
+```{r check_confidential_secondary_aggregation, include=FALSE, eval=FALSE} 
 #file path with geotiffs that you need to check for confidentiality
 in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
 
@@ -2093,34 +2094,6 @@ write.csv(parsed_groups, csv_out)
 ```	
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ```{r prep_geotiffs2, include=FALSE,eval=TRUE}   
 # Read in the file attributes of the individual rasters.
 
@@ -2188,7 +2161,7 @@ if (nrow(confid_prob)>=1){
 }
 ```	
 
-```{r makegeotiffs2, include=FALSE, eval=FALSE}  
+```{r makegeotiffs2, include=FALSE, eval=TRUE}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 
 ```	
@@ -2299,6 +2272,355 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 
 ```	
 
+
+```{r check_confidential_secondary_aggregation2, include=FALSE, eval=TRUE} 
+#file path with geotiffs that you need to check for confidentiality
+in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
+
+#place to store cleaned geotiffs and cleaned images
+cleaned.geotiff.path<- file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"PII_aggregated")
+cleaned.image.path<-file.path(root.image.path,paste(readable_name,todaysdate,sep="_"),"PII_aggregated")
+
+dir.create(cleaned.geotiff.path, recursive=T, showWarnings=FALSE)
+dir.create(cleaned.image.path, recursive=T, showWarnings=FALSE)
+R.start.time<-Sys.time()
+start.time.total<-R.start.time
+#################################################
+## Adapt Step_7_check_confidentiality to check the  aggregated rasters in the previous step.
+#################################################
+#################################################################################
+####
+######################
+## Outline of the Script Process: 
+# 2) List all the rasters that are going to be processed
+# 3) Put them into "parsed_groups" dataframe, to break the name up and allow us to categorize by group (FMP, species, gear), unit (revenue vs. quantity), and year.
+# 4) When the code runs, you choose a group (such as a particular FMP) and creates temporary subgroups (FMP_REVENUE & FMP_QTYKEPT)
+# 5) Determines the maximum extent of data in the rasters for the whole group (for rasters of both units types)
+# 6) The code then begins to run first the QTYKEPT raster, determines the value-range and breaks the values into classification bins. 
+# 7) Then Min-Yang's confidentiality checker converts each raster to a polygon, and checks that at least 3 distinct permits are in a discrete area.
+#       Re-names the value bins and re-assigns the correct bin-values for the plotted map
+#       The code plots both the original ("raw") and the reclassified map as a png, also saving the CSV of value-cuts for the binning. 
+######################
+
+
+
+#### (3) Set up to work from the FINAL MAPS folder:
+
+# Setup to loop through unique file paths: 
+# List all the rasters in "FINAL MAPS" (below) .... and parse their filenames out into FILEPATH, NAME, and UNIT (further down)
+tif_pat<-glob2rx("*.tif")
+
+rasterlist<- lapply(as.list(list.dirs(path=in.geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=tif_pat)
+
+##############################
+
+# Parse out the names of each raster's file path into chunks
+    parsed_groups = do.call(rbind, lapply(rasterlist, function(xx) { # Takes the list creates dataframe where first column is filepath
+      xx = as.data.frame(xx, stringsAsFactors=F)
+      names(xx) = "FILEPATH" 
+      return(xx) }) ) 
+
+parsed_groups$NAME = sapply(parsed_groups$FILEPATH, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "/"))
+  return(temp[NCOL(temp)]) })
+
+parsed_groups$NAME <-gsub(".tif","",parsed_groups$NAME)
+
+parsed_groups$MONTH =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) { # We are referring to "REVENUE" versus "QTYKEPT here
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[NCOL(temp)]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+ 
+parsed_groups$MONTH<-as.numeric(parsed_groups$MONTH)  
+
+    
+    parsed_groups$TYPE =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) { # GROUP-UNIT combo, as in "BLUEFISHFMP-REVENUE" vs. "BLUEFISHFMP-QTYKEPT"
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[1]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    
+    parsed_groups$METRIC =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[2]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    
+     parsed_groups$EXTRA =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+       temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+       return(temp[3]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    # 
+     parsed_groups$Type_Metric_Extra =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+       temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+       return(file.path(paste0(temp[1],"_",temp[2],"_",temp[3]))) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    # parsed_groups$Type_Metric_Extra <-paste0(parsed_groups$Type_Metric_Extra,"_regime_",parsed_groups$REGIME)
+    #   
+# Drop rows of rasters to ignore - groups of species/year, etc to NOT plot
+  #  parsed_groups <-parsed_groups[(parsed_groups$TYPE %in% c("hrgmack")),] 
+#    parsed_groups <-parsed_groups[(parsed_groups$MONTH %in% c("4","6")),] 
+    
+##########################################
+
+#
+### (4) Loop through the unique filepaths! - List of unique GROUPINPATH names
+list_groupinpath <- sort(unique(parsed_groups$Type_Metric_Extra)) # List of unique GROUPPATHs; will break out into UNIT subgroups inside the loop
+
+    
+############## BEGIN SET IMAGE WINDOW ###################
+xxyy=data.frame() # Start with creating a new list for dimension info
+
+  for (b in (1:nrow(parsed_groups))) {
+    # For plotting rasters in a projected coordinate system
+    
+    extremes <- raster(parsed_groups$FILEPATH[b]) 
+    parsed_groups$total_value[b]<-cellStats(extremes,'sum', na.rm="TRUE")
+    extremes <- rasterToPoints(extremes, fun=function(x){x>1}) 
+    
+
+    extremes.df <- as.data.frame(extremes)
+    
+    max.x <- max(extremes.df$x)
+    min.x <- min(extremes.df$x)
+    max.y <- max(extremes.df$y)
+    min.y <- min(extremes.df$y)
+    xxyy= rbind(xxyy, c(max.x,min.x,max.y,min.y))
+    
+  } # end loop setting up max extent info 
+  
+  # Add column names for ease of comprehension
+  colnames(xxyy)=c("MaxX", "MinX", "MaxY", "MinY")
+  
+  # These are min and max x and y values set for standardizing plot extents
+  extreme.ylimit = c(min(xxyy[,"MinY"]), max(xxyy[,"MaxY"]))
+  extreme.xlimit = c(min(xxyy[,"MinX"]), max(xxyy[,"MaxX"]))
+  
+  
+  ############## END SET IMAGE WINDOW ###################
+  
+
+
+
+# Begin loop through each raster GROUPUNITPATH (as in, each subset of rasters) 
+#  for (i in (5:length(list_groupinpath))){
+# for (i in (1:1 )) {
+
+for (i in (1:length(list_groupinpath))){
+
+# Create a list of rasters that are in that GROUPUNITPATH 
+  temp_rgrouplist <- parsed_groups[parsed_groups$Type_Metric_Extra == list_groupinpath[i],] # All rasters in a GroupPath (As in, in "MONKFISH FMP" - not broken by unit yet)
+  
+  temp_R_list <- temp_rgrouplist
+  temp_R_list$textUnit <- temp_rgrouplist$METRIC
+  
+  ### FIND BINNING & PLOT THE RASTERS in the GROUP    
+if(nrow(temp_R_list) > 1){ # error catch when there was accidentally no Q or R folders for a metier....
+#
+  R.start.time <- Sys.time()
+# You MUST make a new "mylist" object or the sampling will not work correctly. 
+  mylist=list() # for new Jenks binning
+  
+#### Additional code for confidentiality check
+working_group<-temp_R_list
+
+TME<-working_group$Type_Metric_Extra[1]
+
+
+# This comes from the prep_geotiffs2 chunk
+# logical_subset<-quote(which(FINALstack$NESPP3 %in% c(168) &FINALstack[[FIELD]]>=1)) 
+#############################################################################
+# This construction first keeps the unique TRIPIDs that match the logical (get positive revenue from herring).
+# Then, we retain all the catch records for those TRIPIDs
+
+IDs<-FINALstack[eval(logical_subset),]
+IDs<-unique(IDs$TRIPID)
+# This is a bit unnecessary, since we're checking for 3 or more unique permits and each TRIPID is associated with I permit.  We could just keep 1 row per TRIPID and we basically do that in the unique() that is right before we source the production confidentiality checker.
+FINAL_W = FINALstack[which(FINALstack$TRIPID%in%IDs),]
+FINAL_W = FINAL_W[which(!is.na(FINAL_W[[FIELD]])),]
+FINAL_W = FINAL_W[which(FINAL_W[[FIELD]]!=0),]
+
+# We also keep only the entires where FINAL_W$MONTH matches
+FINAL_W<-FINAL_W[which(FINAL_W$MONTH %in% working_group$MONTH),]
+
+  for (s in (1:nrow(temp_R_list))){ # Do jenks binning on GROUP-UNIT subset, and plot those rasters
+      start.time <- Sys.time()
+      subsamp<-values(raster(temp_R_list$FILEPATH[s]))
+      subsamp<-subsamp[subsamp>jenks.lowerbound]
+      mylist[[s]] = subsamp
+    }
+# Using list of raster cell values, create the jenks breaks
+    myvals<-unlist(mylist) 
+    myvals<-myvals/rescale_factor
+    glob_max<-floor(max(myvals)) 
+    
+    mysubs<-sample(myvals,num_jenks_subs) # sampling occurs here, refers back to the "set.seed"
+    myclass <- classIntervals(mysubs, n=nbreaks,style="jenks", warnLargeN=FALSE, largeN=6000)
+    mybreaks_class1<-c(0,myclass$brks) # Here we add a "zero" bin, manually. 
+    
+# Now we set up ANOTHER loop to plot the rasters in temp_rasterlist
+for (t in (1:nrow(temp_R_list))){
+  
+      #To fix this, we will set all raster values greater than the upper bound to be slightly less than this upper bound
+      myras<-raster(temp_R_list$FILEPATH[t])
+      myras<-myras/rescale_factor
+         # myras_proj <- projectRaster(myras, crs=PROJ.LATLON)
+      
+      mygroup <- as.character(temp_R_list$Type_Metric_Extra[t])
+      ub=mybreaks_class1[length(mybreaks_class1)]
+      myras[myras>=ub]<-floor(ub)
+      
+#########
+# Min-Yang's code changes for reclassification to 1-6 from value bins
+  blength <-length(mybreaks_class1)-1
+  myclass_matrix <- cbind(mybreaks_class1[1:blength],c(mybreaks_class1[2:blength],glob_max), 1:blength)                      
+  
+  myr2<-reclassify(myras,myclass_matrix, include.lowest=TRUE, right=TRUE)
+  
+  colnames(myclass_matrix)<-c("LB","UB","CATEGORY")
+  cutnames<-working_group$NAME[1]
+  cutnames<-gsub(" ", "_", cutnames)
+  cutnames<-gsub("/", "_", cutnames)
+  cutnames<-paste0(cutnames,".csv")
+  
+  write.csv(myclass_matrix, file=file.path(cleaned.geotiff.path,cutnames),  row.names=FALSE)
+
+  working_month<-as.numeric(temp_R_list$MONTH[t])
+  
+  ############################Be careful here ##################################
+  #SUBSET THE DATASET -- FINAL_w holds the metier in memory, be each tiff needs to be subset by month.
+  FINAL_wy=FINAL_W[which(FINAL_W$MONTH==working_month),]
+  shortlist<-c("IDNUM","PERMIT","LAT","LON")
+  FINAL_wyshort=unique(FINAL_wy[shortlist])
+  ############################Be careful here ##################################
+
+  source(file.path(project_root_path,"R_code/production_confidential_checker.R"))
+
+#########
+
+# Now set up to plot this GROUP of rasters, with the above-determined binning scheme
+
+  # Filename for 'RAW' plotted png
+  png_filename=paste0("raw_", temp_R_list$NAME[t], ".png")
+  rawPNG.file <- file.path(cleaned.image.path, png_filename)
+  
+  
+  my.month<-temp_R_list$MONTH[t]
+  my.month[which(my.month==0)]<-"N/A"
+  my.month<-paste0("Month=",my.month)
+  
+  #my.gear<-paste0("Gear=",temp_R_list$GEAR[t])
+  
+  
+  
+  
+  # Filename for RECLASSIFIED plotted map png
+      reclass_filename=paste0("reclass_", temp_R_list$NAME[t], ".png")
+      reclassPNG.file <- file.path(cleaned.image.path, reclass_filename)
+      
+      # Create a graphical object of text
+
+      our.max.pixels = 8e8 # This is slightly larger than the number of cells in the baseraster (the max number of cells possible)
+      
+      jcons<-levelplot(myras, 
+                       raster=TRUE,
+                       #aspect="xy",
+                       maxpixels=our.max.pixels,
+                       margin=FALSE, 
+                       #main=title_opts1,                  
+                       par.setting=mycoloropts, scales=myscaleopts, at=mybreaks_class1, 
+                       xlim=extreme.xlimit,ylim=extreme.ylimit, 
+                       colorkey=myckey 
+                      )
+# OUTPUT  for the RAW raster 
+      png(file=rawPNG.file, width=png.width, height=png.height, units="px"
+          , bg="white")
+      
+      
+      
+      print(jcons+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
+            + layer(sp.lines(NLS_grnd))+ layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
+            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            
+      )
+      
+      # print(jcons 
+      #       + layer(sp.polygons(my_basemap2,fill=mylandfill))
+      #       + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
+            #+ layer(grid.draw(gr.text))
+     # )
+      dev.off()
+##################################      
+      end.time <- Sys.time()
+      #print(paste0("REVENUE rasters were built in ", round((end.time - start.time), digits=2), " minutes."))
+      
+##### 
+      #reclass_gtiff_name<-gsub(".png", ".tif", reclass_filename) 
+      reclass_gtiff_name<-gsub(".png", ".tif", reclass_filename) 
+      #store the reclassified raster.
+      writeRaster(myr2, file.path(cleaned.geotiff.path,reclass_gtiff_name), format="GTiff", overwrite=T)
+      
+      our.max.pixels = 550000 #8e6 # This is slightly larger than the number of cells in the baseraster (the max number of cells possible)
+      
+      mylegend<-floor(mybreaks_class1)
+      #sub in the true largest value 
+      mylegend[length(mylegend)]<-glob_max
+      myckey2<-list(at=seq(0, length(mylegend)-1, 1), labels=list(at=seq(0,length(mylegend)-1,1),labels=mylegend, cex=2))
+      
+      rclassed<-levelplot(myr2,  
+                            #raster=TRUE,
+                            #aspect="xy",
+                            maxpixels=our.max.pixels,
+                            margin=FALSE,
+                            col.regions=brewer.friendly.bupu,scales=myscaleopts,
+                            at=seq(0, length(mylegend)-1, 1),
+                            xlim=extreme.xlimit,ylim=extreme.ylimit,
+                            colorkey=myckey2
+                            )
+      
+      png(file=reclassPNG.file, width=png.width, height=png.height, units="px"
+          , bg="white")
+      
+      print(rclassed+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
+            + layer(sp.lines(NLS_grnd))+ layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
+            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            
+      )
+      #print(rclassed
+       #     + layer(sp.polygons(my_basemap2,fill=mylandfill))
+        #    + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
+            #+ layer(grid.draw(gr.text))
+      #)
+      dev.off()
+      
+###     
+      print(paste0("You just made the ",reclass_gtiff_name, " image" ))
+      
+    }  
+    # END loop plotting REVENUE rasters
+##############
+    R.end.time <- Sys.time()
+} # End error-catch for R list < 5 rows
+
+    print(paste0("Started at ", (R.start.time)," and ended at ", R.end.time, ". Total time: ", (R.end.time - R.start.time)))
+    print("------------------")
+################################
+### Ends where the rasters are individually plotted
+  } 
+
+# Ends whole loop!
+end.time.total <- Sys.time()
+end.time.total-start.time.total
+
+############################
+####
+csv_out<-file.path(cleaned.geotiff.path,"parsed_groups.csv")
+write.csv(parsed_groups, csv_out)
+
+  
+
+```	
 
 <!-- Note: The HULLNUM/VESID variable is not used in this dataset to fill in the permit number for clam trips (which don't have a permit attached to the record in the SFCLAM database). This will introduce NA's to the data. -->
 
@@ -4753,6 +5075,8 @@ cat("\n\n\n\n\n\n")
 
 ```
 
+
+
 ```{r select_gear_code_summary, results='asis', eval = select_gear_section_summary} 
 
 section_name = "Select Gear Types"
@@ -5202,7 +5526,7 @@ cat("\n\n")
 
 <br> 
 
-```{r revenues_by_port_dynamic_text, results='asis', eval = t} 
+```{r revenues_by_port_dynamic_text, results='asis', eval = T} 
  
 piiports <- subset(REVENUEFILE, !is.na(PORTLANDED)) %>%
   # dplyr::select(PORTLANDED, InsideREV, PERMIT, Area) %>%
@@ -6021,6 +6345,211 @@ for (zone in allZones) {
 cat("<br> ")
 
 ```
+
+
+
+
+
+
+
+```{r select_gear_custom_table, eval = select_gear_custom}  
+###############################
+#### Set Select Gear Types ####
+###############################
+
+# New gear types specificed by Doug and Ben
+select_gear_codes <- as_tibble(REVENUEFILE)
+
+select_gear_codes <- select_gear_codes %>% 
+  mutate(gearcat_new = "") %>% 
+  # select(IDNUM, GEARCODE, gearcat_new) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('DRM','DRO','DRU'), 'DREDGE-OTHER', gearcat_new)) %>%
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('DRC'), 'DREDGE-CLAM', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('DRS', 'DTS', 'DTC', 'DSC'), 'DREDGE-SCALLOP', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('GNS'), 'GILLNET-SINK', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('GND', 'GNO','GNR','GNT'), 'GILLNET-OTHER', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('FYK','WEI','TRP'), 'WEIR-TRAP', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('PUR'), 'SEINE-PURSE', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('SED','SEH','SES','STS'), 'SEINE-OTHER', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('HND'), 'HANDLINE', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('RAK','DIV','HRP','CST'), 'HAND-OTHER', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('OBP', 'OHS','OTB','OTC','OTF','OTO','OTR','OTS','OTT','PTB', 'TTS'), 'TRAWL-BOTTOM', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('PTM','OTM'), 'TRAWL-MIDWATER', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('LLB'), 'LONGLINE-BOTTOM', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('LLP'), 'LONGLINE-PELAGIC', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('PTC','PTE','PTF','PTH', 'PTO','PTS','PTW','PTX'), 'POT-OTHER', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('PTL'), 'POT-LOBSTER', gearcat_new)) %>%  
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('OTH'), 'OTHER', gearcat_new)) %>%  
+  mutate(gearcat_new = ifelse(gearcat_new == "", '[blank]', gearcat_new)) 
+  
+###################################
+#### Set Select Gear Types end ####
+###################################
+
+################################################################
+#### Create Dataframe of ALL QTYKEPT and REVENUE, aggregated by REGIME 
+## 96 observations: 16 GEAR, 2 Regimes, 3 months   ####
+################################################################
+
+select_gear_codes2<-select_gear_codes %>%
+    mutate(REGIME = ifelse(Year <= 2014, 1, 2)) %>%
+    dplyr::select(gearcat_new, REGIME, MONTH, PERMIT, DEALNUM, IDNUM, QTYKEPT, REVENUE) %>% # for dealers
+    dplyr::distinct(gearcat_new, REGIME, MONTH, PERMIT, DEALNUM, IDNUM, QTYKEPT, REVENUE)
+
+# PII fixed for all areas; aggregated at the REGIME level (2010-2014 and 2015-2019)
+allactive <- subset(select_gear_codes2, !is.na(gearcat_new)) %>%
+  # dplyr::select(gearcat_new, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
+  dplyr::select(gearcat_new, REGIME, MONTH, PERMIT, DEALNUM, IDNUM, QTYKEPT, REVENUE) %>% # for dealers
+  filter(MONTH  >=9 & MONTH<=11) %>% 
+  group_by(gearcat_new, REGIME, MONTH) %>%
+  dplyr::summarize(
+    nTrips = length(unique(IDNUM)),
+    TotalRev = sum(REVENUE, na.rm = T),
+    TotalLand = sum(QTYKEPT, na.rm = T),
+    npermits = length(unique(PERMIT)),
+    ndealers = length(unique(DEALNUM))
+    ) %>%
+  # mutate(CONF =  npermits < 3) %>%
+  # mutate(CONF2 = ndealers < 3) %>%
+  ungroup() %>%
+  # dplyr::select(-starts_with("gearcat_new")) %>%
+  # dplyr::select(Year, InsideREV, InsideLANDED, npermits, gearcat_new_CONF) %>%
+  group_by(gearcat_new, REGIME, MONTH) %>%
+  dplyr::summarize(
+    Revenue_SM = sum(TotalRev, na.rm = T),
+    Pounds_SM = sum(TotalLand, na.rm = T),
+    npermits_SM = sum(npermits, na.rm = T),
+    ntrips_SM = sum(nTrips, na.rm = T)) %>% 
+  dplyr::rename("Gear_Type"= gearcat_new) 
+
+
+
+
+
+################################################################
+#### Create Dataframe of ALL QTYKEPT and REVENUE, aggregated by REGIME Inside each Area
+## 96 observations: 16 GEAR, 2 Regimes, 3 months, 4 Area   ####
+################################################################
+
+# PII fixed for all areas; aggregated at the REGIME level (2010-2014 and 2015-2019)
+piiselect_gear_codes <- subset(select_gear_codes, !is.na(gearcat_new)) %>%
+  mutate(REGIME = ifelse(Year <= 2014, 1, 2)) %>%
+  # dplyr::select(gearcat_new, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
+  dplyr::select(gearcat_new, REGIME, MONTH, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM, IDNUM) %>% # for dealers
+  filter(Area != "Other") %>% 
+  filter(MONTH  >=9 & MONTH<=11) %>% 
+
+  group_by(gearcat_new, REGIME, MONTH, Area) %>%
+  dplyr::summarize(
+    nTrips = length(unique(IDNUM)),
+    InsideREV = sum(InsideREV, na.rm = T),
+    InsideLANDED = sum(InsideLANDED, na.rm = T),
+    npermits = length(unique(PERMIT)),
+    ndealers = length(unique(DEALNUM))
+    ) %>%
+  # dplyr::select(-starts_with("gearcat_new")) %>%
+  # dplyr::select(Year, InsideREV, InsideLANDED, npermits, gearcat_new_CONF) %>%
+    ungroup() %>%
+  group_by(gearcat_new, REGIME, MONTH,Area) %>%
+  dplyr::summarize(
+    Revenue = sum(InsideREV, na.rm = T),
+    Pounds = sum(InsideLANDED, na.rm = T),
+    npermits = sum(npermits, na.rm = T),
+    ntrips = sum(nTrips, na.rm = T)) %>% 
+  dplyr::rename("Gear_Type"= gearcat_new) 
+
+
+
+################################################################
+#### Create Dataframe of ALL QTYKEPT and REVENUE, aggregated by REGIME in OTHER months 
+################################################################
+
+# PII fixed for all areas; aggregated at the REGIME level (2010-2014 and 2015-2019)
+piiselect_gear_codes3 <- subset(select_gear_codes, !is.na(gearcat_new)) %>%
+  mutate(REGIME = ifelse(Year <= 2014, 1, 2)) %>%
+  # dplyr::select(gearcat_new, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
+  dplyr::select(gearcat_new, REGIME, MONTH, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM, IDNUM) %>% # for dealers
+  filter(Area != "Other") %>% 
+  filter(MONTH  <9 | MONTH>11) %>% 
+
+  group_by(gearcat_new, REGIME, Area) %>%
+  dplyr::summarize(
+    nTrips = length(unique(IDNUM)),
+    InsideREV = sum(InsideREV, na.rm = T),
+    InsideLANDED = sum(InsideLANDED, na.rm = T),
+    npermits = length(unique(PERMIT)),
+    ndealers = length(unique(DEALNUM))
+    ) %>%
+  ungroup() %>%
+  group_by(gearcat_new, REGIME, Area) %>%
+  dplyr::summarize(
+    Revenue_OM = sum(InsideREV, na.rm = T),
+    Pounds_OM = sum(InsideLANDED, na.rm = T),
+    npermits_OM = sum(npermits, na.rm = T),
+    ntrips_OM = sum(nTrips, na.rm = T)) %>% 
+  dplyr::rename("Gear_Type"= gearcat_new) 
+
+areaname<-unique(piiselect_gear_codes$Area)
+
+# expand allarea by 4 and fillin Regime
+allactive<-data.frame(Area=areaname) %>% 
+  tidyr::crossing(allactive) 
+
+
+
+
+colnames(piiselect_gear_codes)
+colnames(allactive)
+# expand piiselect_gear_codes3 3 and fillin MONTHS
+
+select_months<-unique(piiselect_gear_codes$MONTH)
+piiselect_gear_codes3<-data.frame(MONTH=select_months) %>% 
+  tidyr::crossing(piiselect_gear_codes3) 
+
+colnames(piiselect_gear_codes3)
+
+
+final_table<-base::merge(piiselect_gear_codes,piiselect_gear_codes3, by=c("Gear_Type", "REGIME", "MONTH", "Area"),all=TRUE)
+
+final_table<-base::merge(final_table,allactive, by=c("Gear_Type", "REGIME", "MONTH","Area"),all=TRUE)
+
+
+final_table[is.na(final_table)] <- 0
+
+final_table$insidePounds_over_totalSM<-final_table$Pounds/(final_table$Pounds_SM)
+final_table$insidePounds_over_totalOM<-final_table$Pounds/(final_table$Pounds+final_table$Pounds_OM)
+
+final_table$insideR_over_totalSM<-final_table$Revenue/(final_table$Revenue_SM)
+final_table$insideR_over_totalOM<-final_table$Revenue/(final_table$Revenue+final_table$Revenue_OM)
+
+
+write.csv(final_table, file=file.path(root.table.path,paste0("table_update",todaysdate,".csv")), row.names=FALSE)
+#Have to save this somewhere
+
+
+  
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ```{r unique_permits_and_DOCIDs_tables, results='asis', eval=trip_and_vessel_section} 
 
