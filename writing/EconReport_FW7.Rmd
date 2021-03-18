@@ -27,7 +27,7 @@ if(!require(offshoreWind)) {
   require(offshoreWind)}
 
 PKG <- c("foreign", "data.table", "dichromat", "RColorBrewer", "lattice", "scales",  "openxlsx", "sp", "rgdal", "raster","snowfall",
-         "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4")
+         "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4","rasterVis","classInt")
 for (p in PKG) {
   if(!require(p,character.only = TRUE)) {
     install.packages(p)
@@ -61,6 +61,7 @@ desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
 #############################################################################
 # versioning options
 todaysdate <- as.Date(Sys.time())
+todaysdate<-"2021-03-17"
 #############################################################################
 # Paths, names, and locations of inputs and outputs
 offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
@@ -72,6 +73,10 @@ individual.raster.file="raster_manifest_2021-03-15.Rds"
 payloadRDS=file.path(raster_manifest_location,individual.raster.file)
 
 root.geotiff.path<-file.path(project_root_path,"geotiffs","Herring","Framework7")
+root.image.path = file.path(project_root_path,"images","Herring","Framework7")
+
+ML.GIS.PATH<-file.path(network_location,"home2", "mlee", "spatial data")
+
 #############################################################################
 
 
@@ -91,6 +96,77 @@ END.YEAR<-2019
 
 
 
+###################################################################################################
+############SETUP RASTER MAPPING AND CONFIDENTIALITY OPTIONS ######################################
+###################################################################################################
+  #rescale to "total [[ACTIVITY]] per square km" requires dividing by 4 because the grid cells are 0.25 km^2
+  rescale_factor<-4
+
+# Seed for subsampling
+    set.seed(24601)
+# Max nodes for raster confidentiality    
+    max.nodes<-8
+##################################
+
+### Setting up BINNING options: 
+
+# Number of breaks  -  for classifiying raster values into bins
+nbreaks=5
+
+# Subsample for Jenks Natural breaks classifications?  Set sampling-seed later
+num_jenks_subs=5000 # Maybe this should be higher; set to 1000 for the map production process. But, the higher the sample the longer it takes to run.
+
+# Here we exclude all cells <=1. (Later we deal with rasters with so few cells above the lower bound value,
+    # that we change the sample size to match the number of cells with those values.)
+jenks.lowerbound=1
+
+# Min and Max x and y values set to standardize plot extent # the plot extent is set, but then adjusted based on the location of points in the plotted region
+my.ylimit=c(250000,850000)
+my.xlimit=c(1900000,2450000)
+
+#cut point options 
+#my.at <- seq(10, 2500, 500) #this defines equal intervals from 10 to 2500 by 500 units.
+
+#turn things on or or off 
+myscaleopts <- list(draw=FALSE) #Don't draw axes
+#myscaleopts <- list(draw=TRUE)
+
+
+brewer.friendly.ygb <- c("#ffffff", brewer.pal(nbreaks, "YlGnBu"))
+my.friendly.YGB=rasterTheme(region=brewer.friendly.ygb)
+
+#color options (par.setting)
+mycoloropts <- c(my.friendly.YGB)
+our.max.pixels=8e8
+
+# PNG Image Size in pixel units (?) 
+png.height<-1800
+png.width<-1400
+
+## land color 
+mylandfill<- "#d1d1e0"
+############################
+
+
+# Number of color value "bins", plus 0-value will be added too.
+numclasses <- 5
+
+# Set Color Ramp Values 
+brewer.friendly.bupu <- c("#ffffff", brewer.pal(numclasses, "BuPu")) # Blue to purple  (low to high) 
+my.friendly.BUPU <- rasterTheme(region=brewer.friendly.bupu)
+ 
+mycoloropts <-  c(my.friendly.BUPU) 
+
+# Other Plotting Settings 
+myckey <- list(labels=list(cex=2)) # Set the size of color ramp labels (?)
+
+
+
+
+###################################################################################################
+############END OF SETUP RASTER MAPPING AND CONFIDENTIALITY OPTIONS ###############################
+###################################################################################################      
+      
 # Prep data for this vignette must be created with getCallAreaEffort function in the package
 # This must be done seperately from within the vignette and the results placed in a seperate folder 
 # because of the amount of time it takes for the function to run for each shape, which can take a couble of hours 
@@ -133,6 +209,54 @@ source(file.path(project_root_path,"R_code/raster_manifest.R")
 
 ```
 
+```{r LOAD_EXISTING_GIS_DATA, eval=T}
+
+##############################################
+## SECTION 4 - LOAD EXISTING GIS DATA
+#################################################
+
+
+# STATISTICAL AREAS
+my_basemap1 = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data","corrected_stat_areas"), layer="Statistical_Areas", verbose=F)
+my_basemap1 = spTransform(my_basemap1, CRS=PROJ.USE)# Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# Establish "the other"lat lon" projection info
+PROJ.LATLON = crs(my_basemap1)
+
+#THIRTY MINUTE SQUARES
+basemap_30min = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "Thirty_Minute_Squares"), layer="Thirty_Minute_Squares", verbose=F)
+basemap_30min = spTransform(basemap_30min, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# EastCoast_states
+basemap_eastcoast = readOGR(dsn=file.path(ML.GIS.PATH,"basic spatial data","more_states"), layer="EastCoast_states", verbose=F)
+basemap_eastcoast = spTransform(basemap_eastcoast, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# EEZ Shapefiles
+basemap_EEZ = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "corrected_stat_areas"), layer="EEZ", verbose=F)
+basemap_EEZ = spTransform(basemap_EEZ, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# Herring Management areas
+basemap_herringHMA = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures", "garfo gis", "Herring_Management_Areas"), layer="Herring_Management_Areas_mod", verbose=F)
+basemap_herringHMA = spTransform(basemap_herringHMA, CRS=PROJ.USE)
+
+
+#Multispecies Closed Areas CAI, CAII, NLS)
+CAI_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_ca1", verbose=F)
+CAI_grnd = spTransform(CAI_grnd, CRS=PROJ.USE)
+CAI_grnd = CAI_grnd[CAI_grnd$id==2,]
+
+CAII_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_ca2", verbose=F)
+CAII_grnd = spTransform(CAII_grnd, CRS=PROJ.USE)
+
+NLS_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_nls", verbose=F)
+NLS_grnd = spTransform(NLS_grnd, CRS=PROJ.USE)
+
+Closedgf_04_15 = gUnion(CAI_grnd[CAI_grnd$id==2,],CAII_grnd)
+Closedgf_04_15 = gUnion(Closedgf_04_15,NLS_grnd)
+
+
+
+```
 
 
 
@@ -153,7 +277,9 @@ overlap_data_source = "folder"
 # overlap_data_source = "oracle" 
 
 oracle_overlap_table = "APSD.ALL_WEA_2008_2019@garfo_nefsc.world" #Oracle table to pull overlay files from
- overlap_data_path = file.path(network_location,"home5","dcorvi","geret_data_request","HerringFW7_output_CW")
+
+overlap_data_path = file.path(network_location, "home5", "dcorvi", "geret_data_request", "HerringFW7_output_CW") # the file path of the folder where the overlap files are
+
  
 # shapefile_path = file.path(network_location,"home5/dcorvi/geret_data_request/HerringFW7")
 shapefile_path = "" # file path where a shapefile is to use for the map on the report
@@ -214,14 +340,15 @@ query_rec_table = FALSE # query rec table from Oracle? True = yes, False = use f
 query_permits = FALSE # query permit ids for vtr from Oracle? True = yes, False = use flatfile in data/
 query_gearids = FALSE # query gearids for dmis from Oracle? True = yes, False = use flatfile in data/
 
-summary_tables = FALSE
-
+top_fmp_section = TRUE
+other_fmp_section = TRUE
 top_species_section = TRUE
 select_species_section = FALSE
 select_gear_section = TRUE
 fishery_dependence_section = TRUE
 trip_and_vessel_section = FALSE
 
+single_area_summaries = FALSE # force summary tables even if theres only one area
 number_of_top_species = 10 # number of top species for top species section
 
 selectSpecies <- c("BUTTERFISH", "SUMMER FLOUNDER", "INSHORE LONGFIN SQUID", "AMERICAN LOBSTER", "ATLANTIC MACKEREL", "OCEAN QUAHOG", "SCUP", "BLACK SEA BASS", "ILLEX SQUID") # Species in select species section
@@ -513,23 +640,30 @@ if (overlap_data_source == "folder") {
   }
 }
 
+rounded_message <- "All numbers have been rounded to the nearest thousand."
+
+number_of_areas <- length(MGAREA)
 # set code chunks to evaluate
 eval_create_connection = query_dmis_table | query_permits | query_gearids 
 eval_query_DMIS_or_REC = query_dmis_table | query_rec_table 
 eval_query_gearids_permits = query_gearids | query_permits 
 
+summary_tables = number_of_areas > 1 # create summary tables if more than 1 area - can change to false to force summaries of single areas
+
+summary_tables <- if_else(single_area_summaries, TRUE, summary_tables) # create summary tables if forced
+
+top_fmp_section_summary = top_fmp_section & summary_tables
+other_fmp_section_summary = other_fmp_section & summary_tables
 top_species_section_summary = top_species_section & summary_tables
 select_species_section_summary = select_species_section & summary_tables
 select_gear_section_summary = select_gear_section & summary_tables
 
-rounded_message <- "All numbers have been rounded to the nearest thousand."
 
-number_of_areas <- length(MGAREA)
 
 # Setup section numbers
 section_num = 0
 
-message("Running lease area(s): ", wind_area_name, ", Project Area(s): ", proj_area_name," ..")
+message("Running lease area(s): ", paste0(wind_area_name, collapse = ", "), ", Project Area(s): ", paste0(proj_area_name, collapse = ", ")," ..")
 
 ptm.SCRIPT = Sys.time() #bench marking
 
@@ -907,12 +1041,12 @@ message(paste0("Run time ", round(difftime(Sys.time(), ptm.TOTAL, units='secs'),
 
 if (noaa_data_source == "vtr") {
 FIN <- subset(FIN, select=c('PORTLANDED','YEAR','VESID','NESPP3','MONTH','GEARCODE','GEARCAT','SERIAL_NUM','IDNUM','LIVE',
-                            'QTYKEPT','QTYDISC','DAS','SPPNM','REVENUE','FMP','LEN','FY','TRIPID','PERMIT',"STATE1"))
+                            'QTYKEPT','QTYDISC','DAS','SPPNM','REVENUE','FMP','LEN','FY','TRIPID','PERMIT','LAT','LON',"STATE1"))
 } 
 
 if (noaa_data_source == "rec") {
 FIN <- subset(FIN, select=c('TRIPID', 'IDNUM', 'YEAR', 'MONTH', 'DAS', 'SPPNM', 'FMP', 'NANGLERS', 'LIVE', 'QTYKEPT','QTYDISC', 'PORTLANDED',
-                            'NESPP3', 'GEARCODE', 'GEARCAT', 'PERMIT', 'VESID', 'SERIAL_NUM', "STATE1", "DATESAIL"))
+                            'NESPP3', 'GEARCODE', 'GEARCAT', 'PERMIT', 'VESID', 'SERIAL_NUM', "STATE1", "DATESAIL", 'LAT','LON'))
 } 
 
 
@@ -928,7 +1062,7 @@ if (noaa_data_source == "dmis") {
   # message("Merging gearids based on SERIAL_NUM and matching ", comma_format()(length(intersect::base(FIN$TRIPID, FIN$TRIPID_check)))," TRIPID's")
   # dim(FIN)
   FIN <- subset(FIN, select=c('PORTLANDED', 'PORTLND1', 'YEAR', 'MONTH', 'DATESAIL', 'GEARCODE', 'GEARCAT', 'NESPP3', 'SPPNM', 'QTYKEPT', 'LIVE',
-                              'REVENUE', 'FMP', 'IDNUM', 'SERIAL_NUM', "DOCID", 'TRIPID', 'PERMIT', "STATE1", "SOURCE", "DEALNUM", "DAS")) # *added STATE1 variable
+                              'REVENUE', 'FMP', 'IDNUM', 'SERIAL_NUM', "DOCID", 'TRIPID', 'PERMIT', "STATE1", "SOURCE", "DEALNUM", "DAS",'LAT','LON')) # *added STATE1 variable
 }
 
 # comma_format()(nrow(FIN))
@@ -1301,6 +1435,7 @@ if (length(proj_area_name) == 1) {
 ```
 
 ```{r create_map_of_lease_area, eval = T} 
+  crs <- CRS("+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0")
 
 # if (params$skip_google_drive_access) {
 #   all_areas <- offshoreWind::all_areas
@@ -1317,7 +1452,7 @@ if (length(proj_area_name) == 1) {
 
 if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name)) {
   
-all_areas <- spTransform(offshoreWind::all_areas, CRS=CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+all_areas <- spTransform(offshoreWind::all_areas, CRS=crs)
 all_areas <- sf::st_as_sf(all_areas)
 
 lease_area <- all_areas %>% dplyr::filter(NAME == proj_area_name)
@@ -1348,9 +1483,7 @@ lease_area_map <- ggplot(data = east_coast) +
 
 if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == FALSE & shapefile_path != "") {
   layer_name = unique(gsub(pattern="(.+)(.shp$)","\\1", ignore.case = TRUE , list.files(path=shapefile_path, pattern = "(.+)(.shp$)", ignore.case =TRUE, recursive=F, full.names=F)))
-    
-  crs <- CRS("+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0")
-
+  
   if (length(layer_name)>1) {
   
   file_list <- list.files(shapefile_path, pattern = "*shp$", full.names = TRUE)
@@ -1361,6 +1494,7 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
   # all_areas <- spTransform(all_areas, CRSobj = crs)
   # raster::aggregate(all_areas, dissolve = TRUE)
   
+  #I don't understand the reason for the previous 5 lines of code that define all_areas
   count <- 0
   rm(all_areas)
   for (layer in layer_name) {
@@ -1378,7 +1512,8 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
       extra_layer <- extra_layer[,(names(extra_layer) %in% c("NAME"))]
       extra_layer
       # lease_area <- raster::aggregate(ab, dissolve = TRUE)
-      all_areas <- union(extra_layer, all_areas) # Combine all lease areas plus maine area into one shapefile
+      all_areas <- raster::union(extra_layer, all_areas) # Combine all lease areas plus maine area into one shapefile
+      rm(extra_layer)
     }
   }
   
@@ -1501,17 +1636,492 @@ confid_prob<-tsA[(which(tsA$unique_permits<=2)),]
 if (nrow(confid_prob)>=1){
   write.csv(confid_prob,file=file.path(export.geotiff.path,paste(readable_name,"confidential.csv")), row.names=FALSE)
 }
-
+rm(tsA)
 ```	
 
-```{r makegeotiffs1, include=FALSE, eval=TRUE}  
+```{r makegeotiffs1, include=FALSE, eval=FALSE}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 ```	
 
 
+```{r secondary_aggregation, include=FALSE, eval=TRUE} 
+
+#################################################
+# STEP 3 -- Set your mapping options
+#### WHAT ARE YOU TRYING TO Aggregate?
+
+readable_name ="herring-only"
+geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"))
+sp1<-"herring-only_QTYKEPT_"
+z<-paste0("*",sp1,"*.tif")
+mypat1<-glob2rx(z)
+
+outfilestub<-sp1
+out.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
+dir.create(out.geotiff.path, showWarnings = FALSE, recursive=TRUE)
+#################################################
+## END SECTION 4 
+#################################################
+#################################################################################
+###### This script will sum together various geotiffs
+
+######This bit of code gets run over and over and could easily be a separate function or just an Rscript.###################
+list1<- lapply(as.list(list.dirs(path=geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=mypat1)
+parsed_list1 = do.call(rbind, lapply(list1, function(xx) {
+  xx = as.data.frame(xx, stringsAsFactors=F)
+  names(xx) = "FILENAME" 
+  return(xx) }) )      
+
+parsed_list1$NAME = sapply(parsed_list1$FILENAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "/"))
+  return(temp[NCOL(temp)]) })
+
+parsed_list1$NAME <-gsub(".tif","",parsed_list1$NAME)
+
+parsed_list1$MONTH = as.numeric(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[1]) }))
+
+parsed_list1$type = as.character(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[2]) }))
+
+parsed_list1$metric = as.character(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[3]) }))
+
+parsed_list1$YEAR = as.numeric(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[4]) }))
+##########################################################################################################################
 
 
-```{r make_geotiffs2, include=FALSE,eval=TRUE}   
+# Keep months 9,10,11
+
+for (mymonth in 9:11) {
+   yearfileswanted <- parsed_list1[which(parsed_list1$MONTH==mymonth),]
+if (nrow(yearfileswanted)==0){
+#If there are no matching files, do nothing
+  }
+else{   
+# If there is at least 1 matching file, build the name
+outfilename<-paste0(outfilestub,"month_",mymonth,".tif")
+  
+f<-extent(raster(file.path(yearfileswanted$FILENAME[1])))
+new_xmin<-xmin(f)
+new_ymin<-ymin(f)
+new_xmax<-xmax(f)
+new_ymax<-ymax(f)
+
+
+if (nrow(yearfileswanted)==1){
+#There's nothing really to do except save the raster as outfilename  
+  holding_summer<-raster(file.path(yearfileswanted$FILENAME[1]))
+  writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), overwrite=TRUE)
+}
+else{
+for (pp in 2:nrow(yearfileswanted)){
+  f<-extent(raster(file.path(yearfileswanted$FILENAME[pp])))
+  new_xmin<-min(new_xmin,xmin(f))
+  new_ymin<-min(new_ymin,ymin(f))
+  new_xmax<-max(new_xmax,xmax(f))
+  new_ymax<-max(new_ymax, ymax(f))
+}
+
+## THIS SETS THE NEW EXTENT
+f3<-extent(new_xmin,new_xmax, new_ymin, new_ymax)
+
+holding_summer<-extend(raster(file.path(yearfileswanted$FILENAME[1])), f3, value=0)
+
+for (ppp in 2:nrow(yearfileswanted)){
+  temp<-extend(raster(file.path(yearfileswanted$FILENAME[ppp])), f3, value=0)
+  holding_summer<-temp+holding_summer
+  }
+}
+
+#divide by the number of years
+nobs<-nrow(yearfileswanted)
+#holding_summer<-holding_summer/nobs
+writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), overwrite=TRUE)
+}
+}
+
+```	
+
+
+
+```{r check_confidential_secondary_aggregation, include=FALSE, eval=TRUE} 
+#file path with geotiffs that you need to check for confidentiality
+in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
+
+#place to store cleaned geotiffs and cleaned images
+cleaned.geotiff.path<- file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"PII_aggregated")
+cleaned.image.path<-file.path(root.image.path,paste(readable_name,todaysdate,sep="_"),"PII_aggregated")
+
+dir.create(cleaned.geotiff.path, recursive=T, showWarnings=FALSE)
+dir.create(cleaned.image.path, recursive=T, showWarnings=FALSE)
+R.start.time<-Sys.time()
+start.time.total<-R.start.time
+#################################################
+## Adapt Step_7_check_confidentiality to check the  aggregated rasters in the previous step.
+#################################################
+#################################################################################
+####
+######################
+## Outline of the Script Process: 
+# 2) List all the rasters that are going to be processed
+# 3) Put them into "parsed_groups" dataframe, to break the name up and allow us to categorize by group (FMP, species, gear), unit (revenue vs. quantity), and year.
+# 4) When the code runs, you choose a group (such as a particular FMP) and creates temporary subgroups (FMP_REVENUE & FMP_QTYKEPT)
+# 5) Determines the maximum extent of data in the rasters for the whole group (for rasters of both units types)
+# 6) The code then begins to run first the QTYKEPT raster, determines the value-range and breaks the values into classification bins. 
+# 7) Then Min-Yang's confidentiality checker converts each raster to a polygon, and checks that at least 3 distinct permits are in a discrete area.
+#       Re-names the value bins and re-assigns the correct bin-values for the plotted map
+#       The code plots both the original ("raw") and the reclassified map as a png, also saving the CSV of value-cuts for the binning. 
+######################
+
+
+
+#### (3) Set up to work from the FINAL MAPS folder:
+
+# Setup to loop through unique file paths: 
+# List all the rasters in "FINAL MAPS" (below) .... and parse their filenames out into FILEPATH, NAME, and UNIT (further down)
+tif_pat<-glob2rx("*.tif")
+
+rasterlist<- lapply(as.list(list.dirs(path=in.geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=tif_pat)
+
+##############################
+
+# Parse out the names of each raster's file path into chunks
+    parsed_groups = do.call(rbind, lapply(rasterlist, function(xx) { # Takes the list creates dataframe where first column is filepath
+      xx = as.data.frame(xx, stringsAsFactors=F)
+      names(xx) = "FILEPATH" 
+      return(xx) }) ) 
+
+parsed_groups$NAME = sapply(parsed_groups$FILEPATH, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "/"))
+  return(temp[NCOL(temp)]) })
+
+parsed_groups$NAME <-gsub(".tif","",parsed_groups$NAME)
+
+parsed_groups$MONTH =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) { # We are referring to "REVENUE" versus "QTYKEPT here
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[NCOL(temp)]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+ 
+parsed_groups$MONTH<-as.numeric(parsed_groups$MONTH)  
+
+    
+    parsed_groups$TYPE =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) { # GROUP-UNIT combo, as in "BLUEFISHFMP-REVENUE" vs. "BLUEFISHFMP-QTYKEPT"
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[1]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    
+    parsed_groups$METRIC =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[2]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    
+     parsed_groups$EXTRA =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+       temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+       return(temp[3]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    # 
+     parsed_groups$Type_Metric_Extra =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+       temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+       return(file.path(paste0(temp[1],"_",temp[2],"_",temp[3]))) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    # parsed_groups$Type_Metric_Extra <-paste0(parsed_groups$Type_Metric_Extra,"_regime_",parsed_groups$REGIME)
+    #   
+# Drop rows of rasters to ignore - groups of species/year, etc to NOT plot
+  #  parsed_groups <-parsed_groups[(parsed_groups$TYPE %in% c("hrgmack")),] 
+#    parsed_groups <-parsed_groups[(parsed_groups$MONTH %in% c("4","6")),] 
+    
+##########################################
+
+#
+### (4) Loop through the unique filepaths! - List of unique GROUPINPATH names
+list_groupinpath <- sort(unique(parsed_groups$Type_Metric_Extra)) # List of unique GROUPPATHs; will break out into UNIT subgroups inside the loop
+
+    
+############## BEGIN SET IMAGE WINDOW ###################
+xxyy=data.frame() # Start with creating a new list for dimension info
+
+  for (b in (1:nrow(parsed_groups))) {
+    # For plotting rasters in a projected coordinate system
+    
+    extremes <- raster(parsed_groups$FILEPATH[b]) 
+    parsed_groups$total_value[b]<-cellStats(extremes,'sum', na.rm="TRUE")
+    extremes <- rasterToPoints(extremes, fun=function(x){x>1}) 
+    
+
+    extremes.df <- as.data.frame(extremes)
+    
+    max.x <- max(extremes.df$x)
+    min.x <- min(extremes.df$x)
+    max.y <- max(extremes.df$y)
+    min.y <- min(extremes.df$y)
+    xxyy= rbind(xxyy, c(max.x,min.x,max.y,min.y))
+    
+  } # end loop setting up max extent info 
+  
+  # Add column names for ease of comprehension
+  colnames(xxyy)=c("MaxX", "MinX", "MaxY", "MinY")
+  
+  # These are min and max x and y values set for standardizing plot extents
+  extreme.ylimit = c(min(xxyy[,"MinY"]), max(xxyy[,"MaxY"]))
+  extreme.xlimit = c(min(xxyy[,"MinX"]), max(xxyy[,"MaxX"]))
+  
+  
+  ############## END SET IMAGE WINDOW ###################
+  
+
+
+
+# Begin loop through each raster GROUPUNITPATH (as in, each subset of rasters) 
+#  for (i in (5:length(list_groupinpath))){
+# for (i in (1:1 )) {
+
+for (i in (1:length(list_groupinpath))){
+
+# Create a list of rasters that are in that GROUPUNITPATH 
+  temp_rgrouplist <- parsed_groups[parsed_groups$Type_Metric_Extra == list_groupinpath[i],] # All rasters in a GroupPath (As in, in "MONKFISH FMP" - not broken by unit yet)
+  
+  temp_R_list <- temp_rgrouplist
+  temp_R_list$textUnit <- temp_rgrouplist$METRIC
+  
+  ### FIND BINNING & PLOT THE RASTERS in the GROUP    
+if(nrow(temp_R_list) > 1){ # error catch when there was accidentally no Q or R folders for a metier....
+#
+  R.start.time <- Sys.time()
+# You MUST make a new "mylist" object or the sampling will not work correctly. 
+  mylist=list() # for new Jenks binning
+  
+#### Additional code for confidentiality check
+working_group<-temp_R_list
+
+TME<-working_group$Type_Metric_Extra[1]
+
+
+# This comes from the prep_geotiffs1 chunk
+# logical_subset<-quote(which(FINALstack$NESPP3 %in% c(168) &FINALstack[[FIELD]]>=1)) 
+FINAL_W<-FINALstack[eval(logical_subset),]
+FINAL_W = FINAL_W[which(!is.na(FINAL_W[[FIELD]])),]
+FINAL_W = FINAL_W[which(FINAL_W[[FIELD]]!=0),]
+
+# We also keep only the entires where FINAL_W$MONTH matches
+FINAL_W<-FINAL_W[which(FINAL_W$MONTH %in% working_group$MONTH),]
+
+  for (s in (1:nrow(temp_R_list))){ # Do jenks binning on GROUP-UNIT subset, and plot those rasters
+      start.time <- Sys.time()
+      subsamp<-values(raster(temp_R_list$FILEPATH[s]))
+      subsamp<-subsamp[subsamp>jenks.lowerbound]
+      mylist[[s]] = subsamp
+    }
+# Using list of raster cell values, create the jenks breaks
+    myvals<-unlist(mylist) 
+    myvals<-myvals/rescale_factor
+    glob_max<-floor(max(myvals)) 
+    
+    mysubs<-sample(myvals,num_jenks_subs) # sampling occurs here, refers back to the "set.seed"
+    myclass <- classIntervals(mysubs, n=nbreaks,style="jenks", warnLargeN=FALSE, largeN=6000)
+    mybreaks_class1<-c(0,myclass$brks) # Here we add a "zero" bin, manually. 
+    
+# Now we set up ANOTHER loop to plot the rasters in temp_rasterlist
+for (t in (1:nrow(temp_R_list))){
+  
+      #To fix this, we will set all raster values greater than the upper bound to be slightly less than this upper bound
+      myras<-raster(temp_R_list$FILEPATH[t])
+      myras<-myras/rescale_factor
+         # myras_proj <- projectRaster(myras, crs=PROJ.LATLON)
+      
+      mygroup <- as.character(temp_R_list$Type_Metric_Extra[t])
+      ub=mybreaks_class1[length(mybreaks_class1)]
+      myras[myras>=ub]<-floor(ub)
+      
+#########
+# Min-Yang's code changes for reclassification to 1-6 from value bins
+  blength <-length(mybreaks_class1)-1
+  myclass_matrix <- cbind(mybreaks_class1[1:blength],c(mybreaks_class1[2:blength],glob_max), 1:blength)                      
+  
+  myr2<-reclassify(myras,myclass_matrix, include.lowest=TRUE, right=TRUE)
+  
+  colnames(myclass_matrix)<-c("LB","UB","CATEGORY")
+  cutnames<-working_group$NAME[1]
+  cutnames<-gsub(" ", "_", cutnames)
+  cutnames<-gsub("/", "_", cutnames)
+  cutnames<-paste0(cutnames,".csv")
+  
+  write.csv(myclass_matrix, file=file.path(cleaned.geotiff.path,cutnames),  row.names=FALSE)
+
+  working_month<-as.numeric(temp_R_list$MONTH[t])
+  
+  ############################Be careful here ##################################
+  #SUBSET THE DATASET -- FINAL_w holds the metier in memory, be each tiff needs to be subset by month.
+  FINAL_wy=FINAL_W[which(FINAL_W$MONTH==working_month),]
+  shortlist<-c("IDNUM","PERMIT","LAT","LON")
+  FINAL_wyshort=unique(FINAL_wy[shortlist])
+  ############################Be careful here ##################################
+
+  source(file.path(project_root_path,"R_code/production_confidential_checker.R"))
+
+#########
+
+# Now set up to plot this GROUP of rasters, with the above-determined binning scheme
+
+  # Filename for 'RAW' plotted png
+  png_filename=paste0("raw_", temp_R_list$NAME[t], ".png")
+  rawPNG.file <- file.path(cleaned.image.path, png_filename)
+  
+  
+  my.month<-temp_R_list$MONTH[t]
+  my.month[which(my.month==0)]<-"N/A"
+  my.month<-paste0("Month=",my.month)
+  
+  #my.gear<-paste0("Gear=",temp_R_list$GEAR[t])
+  
+  
+  
+  
+  # Filename for RECLASSIFIED plotted map png
+      reclass_filename=paste0("reclass_", temp_R_list$NAME[t], ".png")
+      reclassPNG.file <- file.path(cleaned.image.path, reclass_filename)
+      
+      # Create a graphical object of text
+
+      our.max.pixels = 8e8 # This is slightly larger than the number of cells in the baseraster (the max number of cells possible)
+      
+      jcons<-levelplot(myras, 
+                       raster=TRUE,
+                       #aspect="xy",
+                       maxpixels=our.max.pixels,
+                       margin=FALSE, 
+                       #main=title_opts1,                  
+                       par.setting=mycoloropts, scales=myscaleopts, at=mybreaks_class1, 
+                       xlim=extreme.xlimit,ylim=extreme.ylimit, 
+                       colorkey=myckey 
+                      )
+# OUTPUT  for the RAW raster 
+      png(file=rawPNG.file, width=png.width, height=png.height, units="px"
+          , bg="white")
+      
+      
+      
+      print(jcons+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
+            + layer(sp.lines(NLS_grnd))+ layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
+            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            
+      )
+      
+      # print(jcons 
+      #       + layer(sp.polygons(my_basemap2,fill=mylandfill))
+      #       + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
+            #+ layer(grid.draw(gr.text))
+     # )
+      dev.off()
+##################################      
+      end.time <- Sys.time()
+      #print(paste0("REVENUE rasters were built in ", round((end.time - start.time), digits=2), " minutes."))
+      
+##### 
+      #reclass_gtiff_name<-gsub(".png", ".tif", reclass_filename) 
+      reclass_gtiff_name<-gsub(".png", ".tif", reclass_filename) 
+      #store the reclassified raster.
+      writeRaster(myr2, file.path(cleaned.geotiff.path,reclass_gtiff_name), format="GTiff", overwrite=T)
+      
+      our.max.pixels = 550000 #8e6 # This is slightly larger than the number of cells in the baseraster (the max number of cells possible)
+      
+      mylegend<-floor(mybreaks_class1)
+      #sub in the true largest value 
+      mylegend[length(mylegend)]<-glob_max
+      myckey2<-list(at=seq(0, length(mylegend)-1, 1), labels=list(at=seq(0,length(mylegend)-1,1),labels=mylegend, cex=2))
+      
+      rclassed<-levelplot(myr2,  
+                            #raster=TRUE,
+                            #aspect="xy",
+                            maxpixels=our.max.pixels,
+                            margin=FALSE,
+                            col.regions=brewer.friendly.bupu,scales=myscaleopts,
+                            at=seq(0, length(mylegend)-1, 1),
+                            xlim=extreme.xlimit,ylim=extreme.ylimit,
+                            colorkey=myckey2
+                            )
+      
+      png(file=reclassPNG.file, width=png.width, height=png.height, units="px"
+          , bg="white")
+      
+      print(rclassed+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
+            + layer(sp.lines(NLS_grnd))+ layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
+            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            
+      )
+      #print(rclassed
+       #     + layer(sp.polygons(my_basemap2,fill=mylandfill))
+        #    + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
+            #+ layer(grid.draw(gr.text))
+      #)
+      dev.off()
+      
+###     
+      print(paste0("You just made the ",reclass_gtiff_name, " image" ))
+      
+    }  
+    # END loop plotting REVENUE rasters
+##############
+    R.end.time <- Sys.time()
+} # End error-catch for R list < 5 rows
+
+    print(paste0("Started at ", (R.start.time)," and ended at ", R.end.time, ". Total time: ", (R.end.time - R.start.time)))
+    print("------------------")
+################################
+### Ends where the rasters are individually plotted
+  } 
+
+# Ends whole loop!
+end.time.total <- Sys.time()
+end.time.total-start.time.total
+
+############################
+####
+csv_out<-file.path(cleaned.geotiff.path,"parsed_groups.csv")
+write.csv(parsed_groups, csv_out)
+
+  
+
+```	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r prep_geotiffs2, include=FALSE,eval=TRUE}   
 # Read in the file attributes of the individual rasters.
 
 #I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
@@ -1578,127 +2188,12 @@ if (nrow(confid_prob)>=1){
 }
 ```	
 
-```{r makegeotiffs2, include=FALSE, eval=TRUE}  
+```{r makegeotiffs2, include=FALSE, eval=FALSE}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 
 ```	
 
-```{r secondary_aggregation, include=FALSE, eval=TRUE} 
-
-
-
-#################################################
-# STEP 3 -- Set your mapping options
-#### WHAT ARE YOU TRYING TO Aggregate?
-
-readable_name ="herring-only"
-geotiff.path = file.path(root.geotiff.path,paste(readable_name,"2021-03-16",sep="_"))
-sp1<-"herring-only_QTYKEPT_"
-z<-paste0("*",sp1,"*.tif")
-mypat1<-glob2rx(z)
-
-outfilestub<-sp1
-out.geotiff.path = file.path(root.geotiff.path,paste(readable_name,"2021-03-16",sep="_"),"aggregated")
-dir.create(out.geotiff.path, showWarnings = FALSE, recursive=TRUE)
-#################################################
-## END SECTION 4 
-#################################################
-#################################################################################
-###### This script will sum together various geotiffs
-
-######This bit of code gets run over and over and could easily be a separate function or just an Rscript.###################
-list1<- lapply(as.list(list.dirs(path=geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=mypat1)
-parsed_list1 = do.call(rbind, lapply(list1, function(xx) {
-  xx = as.data.frame(xx, stringsAsFactors=F)
-  names(xx) = "FILENAME" 
-  return(xx) }) )      
-
-parsed_list1$NAME = sapply(parsed_list1$FILENAME, USE.NAMES=F, function(zz) {
-  temp = do.call(rbind,strsplit(as.character(zz), split = "/"))
-  return(temp[NCOL(temp)]) })
-
-parsed_list1$NAME <-gsub(".tif","",parsed_list1$NAME)
-
-parsed_list1$MONTH = as.numeric(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
-  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
-  return(temp[1]) }))
-
-parsed_list1$type = as.character(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
-  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
-  return(temp[2]) }))
-
-parsed_list1$metric = as.character(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
-  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
-  return(temp[3]) }))
-
-parsed_list1$YEAR = as.numeric(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
-  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
-  return(temp[4]) }))
-##########################################################################################################################
-##########################################################################################################################
-##########################################################################################################################
-
-
-# Keep months 9,10,11
-
-for (mymonth in 9:11) {
-   yearfileswanted <- parsed_list1[which(parsed_list1$MONTH==mymonth),]
-if (nrow(yearfileswanted)==0){
-#If there are no matching files, do nothing
-  }
-else{   
-# If there is at least 1 matching file, build the name
-outfilename<-paste0(outfilestub,"month_",mymonth,".tif")
-  
-f<-extent(raster(file.path(yearfileswanted$FILENAME[1])))
-new_xmin<-xmin(f)
-new_ymin<-ymin(f)
-new_xmax<-xmax(f)
-new_ymax<-ymax(f)
-
-
-if (nrow(yearfileswanted)==1){
-#There's nothing really to do except save the raster as outfilename  
-  holding_summer<-raster(file.path(yearfileswanted$FILENAME[1]))
-  writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), overwrite=TRUE)
-}
-else{
-for (pp in 2:nrow(yearfileswanted)){
-  f<-extent(raster(file.path(yearfileswanted$FILENAME[pp])))
-  new_xmin<-min(new_xmin,xmin(f))
-  new_ymin<-min(new_ymin,ymin(f))
-  new_xmax<-max(new_xmax,xmax(f))
-  new_ymax<-max(new_ymax, ymax(f))
-}
-
-## THIS SETS THE NEW EXTENT
-f3<-extent(new_xmin,new_xmax, new_ymin, new_ymax)
-
-holding_summer<-extend(raster(file.path(yearfileswanted$FILENAME[1])), f3, value=0)
-
-for (ppp in 2:nrow(yearfileswanted)){
-  temp<-extend(raster(file.path(yearfileswanted$FILENAME[ppp])), f3, value=0)
-  holding_summer<-temp+holding_summer
-  }
-}
-
-#divide by the number of years
-nobs<-nrow(yearfileswanted)
-#holding_summer<-holding_summer/nobs
-writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), overwrite=TRUE)
-}
-
-}
-
-
-
-
-
-```	
-
-
 ```{r secondary_aggregation_part2, include=FALSE, eval=TRUE} 
-
 
 
 #################################################
@@ -1706,13 +2201,14 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 #### WHAT ARE YOU TRYING TO Aggregate?
 
 readable_name ="allrev-trips-catch168"
-geotiff.path = file.path(root.geotiff.path,paste(readable_name,"2021-03-16",sep="_"))
+geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"))
 sp1<-"allrev-trips-catch168_REVENUE_"
 z<-paste0("*",sp1,"*.tif")
 mypat1<-glob2rx(z)
 
 outfilestub<-sp1
-out.geotiff.path = file.path(root.geotiff.path,paste(readable_name,"2021-03-16",sep="_"),"aggregated")
+
+out.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
 dir.create(out.geotiff.path, showWarnings = FALSE, recursive=TRUE)
 #################################################
 ## END SECTION 4 
@@ -1726,7 +2222,6 @@ parsed_list1 = do.call(rbind, lapply(list1, function(xx) {
   xx = as.data.frame(xx, stringsAsFactors=F)
   names(xx) = "FILENAME" 
   return(xx) }) )      
-
 
 parsed_list1$NAME = sapply(parsed_list1$FILENAME, USE.NAMES=F, function(zz) {
   temp = do.call(rbind,strsplit(as.character(zz), split = "/"))
@@ -1802,10 +2297,8 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 
 }
 
-
-
-
 ```	
+
 
 <!-- Note: The HULLNUM/VESID variable is not used in this dataset to fill in the permit number for clam trips (which don't have a permit attached to the record in the SFCLAM database). This will introduce NA's to the data. -->
 
@@ -1895,23 +2388,10 @@ References
 # unique(REVENUEFILE$NESPP3)
 # test <- REVENUEFILE %>% filter(is.na(FMP))
 
-# get top 5 fmps by revenue, by area (without confidentiallity check) for dynamic text
-top5byArea <- REVENUEFILE %>% group_by(FMP, Area) %>%
-  filter(Area != "Other") %>% 
-  dplyr::summarize(
-    REV = sum(InsideREV, na.rm = T)
-    ) %>%
-  ungroup %>%
-  group_by(Area) %>%
-  top_n(., n=5, wt=REV) %>%
-  arrange(Area, desc(REV)) %>%
-  ungroup
-
 # Top 5 fmps after pii fix for all areas
-top_five_fmp_names <- subset(REVENUEFILE, !is.na(FMP)) %>%
+top_five_fmp_names <- REVENUEFILE %>%
   filter(Area != "Other") %>% 
-  # dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
-  dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM ) %>%
+  dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM) %>%
   group_by(Year, FMP, Area) %>%
   dplyr::summarize(
     InsideREV = sum(InsideREV, na.rm = T),
@@ -1919,7 +2399,6 @@ top_five_fmp_names <- subset(REVENUEFILE, !is.na(FMP)) %>%
     npermits = length(unique(PERMIT)),
     ndealers = length(unique(DEALNUM))
     ) %>%
-  # mutate(CONF =  npermits < 3) %>%
   mutate(CONF =  npermits < 3 | ndealers < 3) %>%
   mutate(FMP_CONF = ifelse(CONF == T, 'All Others', FMP)) %>%
   ungroup() %>%
@@ -1930,6 +2409,7 @@ top_five_fmp_names <- subset(REVENUEFILE, !is.na(FMP)) %>%
     npermits = sum(npermits, na.rm = T)) %>% 
   dplyr::rename("FMP"= FMP_CONF) %>% 
   dplyr::select(FMP, Year, Area, yfa_rev, yfa_land) %>% 
+  # group_by(FMP, Area) %>% 
   group_by(FMP) %>% 
   dplyr::summarize(
     allyrtotal_rev = sum(yfa_rev, na.rm = T),
@@ -1939,70 +2419,19 @@ top_five_fmp_names <- subset(REVENUEFILE, !is.na(FMP)) %>%
   top_n(n=5, wt=allyrtotal_rev) %>% 
   pull(FMP)
 
-
-# count of number of unique FMPs between each area
-top5byArea <- within(top5byArea, { count <- ave(Area, FMP, FUN=function(x) length(unique(x)))})
-
-# check for whether FMPs are all the same between areas then set text to be dynamic and inform users what areas where not ubiquitous
-# check_for_unique_FMPS <- ifelse(any(as.integer(unique(top5byArea$count)) %in% 1), paste0("Some ", area_adjective, "areas did not share the same top five most impacted FMPs. ", "The ", area_adjective, "area(s) with differing FMPs were ", gsub("_"," ", pull(top5byArea[top5byArea$count==1,"Area"])), " and the FMP(s) include ", pull(top5byArea[top5byArea$count==1,"FMP"]),"."), paste0("All ", area_adjective, "areas had the same top five most impacted FMPs."))
-
-# pull(top5byArea[top5byArea$count==1,"FMP"]) # get vector of FMPs not shared by all areas
-# pull(top5byArea[top5byArea$count==1,"Area"]) # get vector of Area not shared by all areas
-
-# paste0("Area(s) with differing FMPs were ",gsub("_"," ", pull(top5byArea[top5byArea$count==1,"Area"])), " with FMPs that include ", pull(top5byArea[top5byArea$count==1,"FMP"]),".")
-
 # Might be an issue of top 5 FMP has 0 revenue
 
-piifmp_allyrs <- subset(REVENUEFILE, !is.na(FMP)) %>%
-  filter(Area != "Other") %>% 
-  # dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT ) %>%
-  dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
-  group_by(FMP) %>%
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF =  npermits < 3) %>%
-  # mutate(CONF2 =  ndealers < 3) %>%
-  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
-  mutate(FMP_CONF = ifelse(CONF == T, 'All Others', FMP)) %>%
-  ungroup() %>%
-  # dplyr::select(-starts_with("FMP")) %>%
-  dplyr::select(InsideREV, InsideLANDED, npermits, FMP_CONF) %>%
-  group_by(FMP_CONF) %>%
-  dplyr::summarize(
-    InsideREV_total = sum(InsideREV, na.rm = T),
-    InsideLANDED_total = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T)) %>%
-  arrange(desc( InsideREV_total)) %>%
-  dplyr::rename("FMP"= FMP_CONF, "All Revenue" = InsideREV_total, "All Landings (Pounds)" = InsideLANDED_total)  
-
-allyrfmp_table <- head(piifmp_allyrs[order(-piifmp_allyrs$'All Revenue'),],5) #get top FMPs of all areas by revenue
-
-all_topfmp_names <- unique(allyrfmp_table$FMP)
-
-all_topfmp_names <- top_five_fmp_names # pii after grouping fix for all areas
-
-# allyrfmp_table$FMP <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(allyrfmp_table$FMP), perl=TRUE)
-# allyrfmp_table$FMP[allyrfmp_table$FMP=="None"] <- "No Federal FMP"
-
-topfmp_names_all <- unique(allyrfmp_table$FMP)
-topfmp_names_all <- top_five_fmp_names # pii after grouping fix for all areas
-
-if (any(topfmp_names_all %in% "No Federal FMP")) {
-  # allyrfmp_table$FMP[allyrfmp_table$FMP=="None"] <- "No Federal FMP"
-  topfmp_names <- paste0(topfmp_names_all[!topfmp_names_all %in% "No Federal FMP"], collapse = ", ")
+if (any(top_five_fmp_names %in% "No Federal FMP")) {
+  topfmp_names <- paste0(top_five_fmp_names[!top_five_fmp_names %in% "No Federal FMP"], collapse = ", ")
   topfmp_names <- paste0(topfmp_names, " and No Federal FMP")
 } else {
-  topfmp_names <- paste0(topfmp_names_all %notin%  tail(topfmp_names_all, n=1), collapse = ", ")
-  topfmp_names <-paste0(topfmp_names, " and ", tail(topfmp_names_all, n=1))
+  topfmp_names <- paste0(top_five_fmp_names %notin%  tail(top_five_fmp_names, n=1), collapse = ", ")
+  topfmp_names <-paste0(topfmp_names, " and ", tail(top_five_fmp_names, n=1))
 }
 
 # length(unique(REVENUEFILE[which(REVENUEFILE$FMP == "None" & REVENUEFILE$InsideREV > 0),]$SPPNM))
 
-piifmpsppnm_allyrs <- subset(REVENUEFILE, !is.na(FMP)) %>% 
+piifmpsppnm_allyrs <- REVENUEFILE %>% 
   filter(Area != "Other") %>% 
   # dplyr::select(FMP, SPPNM, Year, InsideREV, InsideLANDED, PERMIT) %>%
   dplyr::select(FMP, SPPNM, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
@@ -2032,12 +2461,7 @@ piifmpsppnm_allyrs <- subset(REVENUEFILE, !is.na(FMP)) %>%
 numsp <- length(unique(piifmpsppnm_allyrs$SPPNM))
 
 
-# ifelse(any(topfmp_names_all %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (",ifelse(numsp==0,"there were no species", paste0("there are close to ", numsp," species"))," without federal FMPs caught in the ", wind_area_name, "  area)."),".")
-
-
-# ifelse(any(topfmp_names_all %in% "No Federal FMP"),paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in ----)."),".")
-
-# what if areas dont have same top FMP
+# -if areas dont have same top FMP ??
 
 
 ```
@@ -2045,17 +2469,22 @@ numsp <- length(unique(piifmpsppnm_allyrs$SPPNM))
 <!-- ## Sections {.tabset .tabset-fade .tabset-pills} -->
 
 \raggedright
-### Most Impacted FMPs 
+<!-- ### Most Impacted FMPs  -->
 
 
-We define “most impacted” as the FMPs deriving the most revenue from the `r if(number_of_areas > 1) {paste0("areas")} else {paste0("area")}` over the `r numbers2words(length(START.YEAR:END.YEAR))` year analysis period of `r START.YEAR` to `r END.YEAR`, indicating the highest potential for impact to industry from a reduction in fishing area. 
-<!-- add check_for_unique_FMPS object here if nessessary -->
-<!-- ~~All areas had the same top five most impacted FMPs~~ -->
- The top 5 FMPs by revenue `r if(number_of_areas > 1) {paste0("between all areas")} else {paste0("in ", wind_area_name)}` were `r topfmp_names``r ifelse(any(topfmp_names_all %in% "No Federal FMP"), paste0(".” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: smooth and chain dogfish, whelk, and menhaden, (",ifelse(numsp==0,"there were no species", paste0("there are close to ", numsp," species"))," without federal FMPs caught in the ", wind_area_name, " area)"),"")`. `r revenue_deflation_note` `r rounded_message` Specific figures on these FMPs within `r if(number_of_areas > 1) {paste0("each")} else {paste0("the")}` area follow.
+<!-- We define “most impacted” as the FMPs deriving the most revenue from the `r if(number_of_areas > 1) {paste0("areas")} else {paste0("area")}` over the `r numbers2words(length(START.YEAR:END.YEAR))` year analysis period of `r START.YEAR` to `r END.YEAR`, indicating the highest potential for impact to industry from a reduction in fishing area.  -->
+<!--  The top 5 FMPs by revenue `r if(number_of_areas > 1) {paste0("between all areas")} else {paste0("in ", wind_area_name)}` were `r topfmp_names``r ifelse(any(top_five_fmp_names %in% "No Federal FMP"), paste0(".” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: smooth and chain dogfish, whelk, and menhaden, (",ifelse(numsp==0,"there were no species", paste0("there are close to ", numsp," species"))," without federal FMPs caught in the ", wind_area_name, " area)"),"")`. `r revenue_deflation_note` `r rounded_message` Specific figures on these FMPs within `r if(number_of_areas > 1) {paste0("each")} else {paste0("the")}` area follow. -->
 
 
-```{r top_fmp_plots, results='asis', eval = T} 
+```{r top_fmp_plots, results='asis', eval = top_fmp_section} 
 ##########################################################################
+
+cat("### Most Impacted FMPs \n")
+
+cat("We define “most impacted” as the FMPs deriving the most revenue from the", if(number_of_areas > 1) {paste0("areas")} else {paste0("area")}, " over the  ", numbers2words(length(START.YEAR:END.YEAR))," year analysis period of ", START.YEAR," to ", END.YEAR,", indicating the highest potential for impact to industry from a reduction in fishing area.", "The top 5 FMPs by revenue ", if(number_of_areas > 1) {paste0("between all areas")} else {paste0(" in ", wind_area_name)}, " were " , topfmp_names, ifelse(any(top_five_fmp_names %in% "No Federal FMP"), paste0(".” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: smooth and chain dogfish, whelk, and menhaden, (", ifelse(numsp==0,"there were no species", paste0("there are close to ", numsp," species"))," without federal FMPs caught in the ", wind_area_name, " area)"),""),". ", revenue_deflation_note," ", rounded_message," Specific figures on these FMPs within ", if(number_of_areas > 1) {paste0("each")} else {paste0("the")}," area follow.", sep="")
+
+cat("<br> ")
+
 # testing
 # save_files = "n" #dont save files as csv or rdata
 # save_files = "c"
@@ -2084,7 +2513,7 @@ figure_num = 0
 
 # DO NOT USE THIS TABLE FOR ANYTHING OTHER THAN DETERMINING THE NAMES OF THE TOP FMPS FOR THE AREA(S) - GROUPING FOR PII WILL MESS UP TOTALS 
 # Get top revenue FMPs, sorted by revenue, grouped by FMPs for all years and remove PII - ** this list order will be used for all areas
-allYearsSum <- subset(REVENUEFILE, !is.na(FMP)) %>% # FMP NAs are already removed in the DMIS cleaning code chunk
+allYearsSum <- REVENUEFILE %>% # FMP NAs are already removed in the DMIS cleaning code chunk
   filter(Area != "Other") %>% 
   # dplyr::select(FMP, InsideREV, InsideLANDED, PERMIT) %>%
   dplyr::select(FMP, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
@@ -2109,9 +2538,8 @@ allYearsSum <- subset(REVENUEFILE, !is.na(FMP)) %>% # FMP NAs are already remove
     npermits = sum(npermits, na.rm = T)) %>% 
   dplyr::rename("FMP"= FMP_CONF)
 
-
 # PII fixed for all areas
-piifmp <- subset(REVENUEFILE, !is.na(FMP)) %>%
+piifmp <- REVENUEFILE %>%
   filter(Area != "Other") %>% 
   # dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
   dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM) %>% # for dealers
@@ -2145,7 +2573,7 @@ fmpallyr_total <- piifmp %>% dplyr::select(FMP, Year, Area, yfa_rev, yfa_land) %
 
 fmp_merge <- merge(piifmp, fmpallyr_total, by = c("FMP", "Area"))
 
-# write.csv(piifmp_allyrs, file="piifmp_allyrs.csv", row.names=FALSE)
+# write.csv(fmp_merge, file="fmp_merge.csv", row.names=FALSE)
 
 # create workbook object for Excel output outside loop
 mostimpactedland_wb <- createWorkbook(creator = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("\\."," ", unname(Sys.info()["user"]))), perl=TRUE), title = "TopFMPLand") # get user full name
@@ -2160,9 +2588,9 @@ writeData(mostimpactedrev_wb, sheet = "TopFMP_AllAreas", fmp_merge, keepNA = TRU
 
 # create a table with a bunch of differently grouped totals that will be filtered by area during the iteration of the graphs
 topFMP_all_areas <- left_join(allYearsSum, fmp_merge, by='FMP') %>% 
-  filter(FMP %in% all_topfmp_names) # all_topfmp_names is from the summary creater section 
+  filter(FMP %in% top_five_fmp_names) # top_five_fmp_names is from the summary creater section 
 
-topFMPNames <- all_topfmp_names # rename to make it sound better
+
 # make FMP names lowercase
 # topFMP_all_areas$FMP <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(topFMP_all_areas$FMP), perl=TRUE)
 # topFMP_all_areas$FMP[topFMP_all_areas$FMP=="None"] <- "No Federal FMP"
@@ -2295,13 +2723,26 @@ for (broadzone in allZones) {
 # topFMP <- left_join(head(allYearsSum[order(-allYearsSum$InsideREV_total),],5), revland_area, by='FMP')
 # topFMPNames <- unique(topFMP$FMP)
 
-  
 # make FMP names lowercase
 # topFMP$FMP <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(topFMP$FMP), perl=TRUE)
 # topFMP$FMP[topFMP$FMP=="None"] <- "No Federal FMP"
+  
+# broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", allZones[2])), perl=TRUE)
 
 # filter grouped totals table by the current area
 topFMP_table <- topFMP_all_areas %>% filter(Area == broadzone_underscore)#create top fmp table without line breaks
+
+#Not sure why we're filling in END.YEAR. Hope its okay.
+#This only works if length()==0 or ==1. It will break for length()>=2
+if (length(top_five_fmp_names %notin% unique(topFMP_table$FMP)) > 0) { # add a blank row for any missing FMPs so they appear in tables and plots for all areas
+  topFMP_table[nrow(topFMP_table)+1,] <- list(top_five_fmp_names %notin% unique(topFMP_table$FMP), 0, 0, 0, broadzone_underscore, as.character(END.YEAR), 0, 0, 0, 0, 0)
+}
+         
+
+
+
+# topFMP_table[nrow(topFMP_table)+1,] <- list(top_five_fmp_names %notin% unique(topFMP_table$FMP), 1, 1, 1, broadzone_underscore, 2119, 1, 1, 1, 1, 1)
+# glimpse(topFMP_table)
 
 topFMP <- topFMP_table
 # change extra long legend names - add a \n to halfway word 
@@ -2493,230 +2934,80 @@ saveWorkbook(mostimpactedrev_wb, file = file.path(output_ftopfmp, paste0("TopFMP
 ```
 
 
-```{r top_fmp_summary_2, results='asis', eval = summary_tables} 
+```{r top_fmp_summary, results='asis', eval = top_fmp_section_summary} 
+
+section_name = "Most Impacted FMPs"
+section_table <- get("topFMP_all_areas") %>% ungroup()
+margin <- "FMP"
 
 cat("<br>") 
 
 cat("*Summary*")
 
-if (number_of_areas == 1) {
-  all_rev <- allyrrev_table %>% filter(FMP =="**Total**") %>% select(-FMP)
-  all_land <- allyrland_table %>% filter(FMP =="**Total**") %>% select(-FMP)
+if (single_area_summaries) {
+  all_rev <- allyrrev_table %>% filter(.data[[margin]] == '**Total**') %>% select(-.data[[margin]])
+  all_land <- allyrland_table %>% filter(.data[[margin]] =="**Total**") %>% select(-.data[[margin]])
   rev_land_total <- cbind(all_rev, all_land)
   row.names(rev_land_total) <- "**Total**"
-  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', 'Most Impacted FMPs '), align=c('r', 'r')))
+  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', section_name, ' '), align=c('r', 'r')))
 } else {
   counter = 1
   for (ar in allZones) {
     if (counter == 1) {
-    ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-    allyr_table <- topFMP_all_areas %>%  
+      ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
+    allyr_table <- as_tibble(section_table %>%  
+      select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%     # use .data[[margin]] to refer to column name stored as string
       filter(Area == ar_u) %>% 
-      distinct(FMP, Area, allyrtotal_rev, allyrtotal_land) %>%
+      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
       arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(FMP, Area, allyrtotal_rev, allyrtotal_land) %>% 
+      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
       dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate(FMP = as.character(FMP)) %>% 
-      ungroup()
+      mutate("{margin}" := as.character(.data[[margin]])) %>% # use '"{margin}" :=' to refer to a column as a string
+      ungroup()) # have to convert to tibble to add up rows
     allyr_table <- rbind(allyr_table, c("**Total**", ar, colSums(allyr_table[,3]), colSums(allyr_table[,4])))
-    allyr_table <- allyr_table %>% filter(FMP =="**Total**")
+    allyr_table <- allyr_table %>% filter(.data[[margin]] =="**Total**")
     counter = 2
   } else {
     ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-      
-    allyr_table_2 <- topFMP_all_areas %>%  
+    allyr_table_2 <- as_tibble(section_table %>%  
       filter(Area == ar_u) %>% 
-      distinct(FMP, Area, allyrtotal_rev, allyrtotal_land) %>%
+      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
       arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(FMP, Area, allyrtotal_rev, allyrtotal_land) %>% 
+      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
       dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate(FMP = as.character(FMP)) %>% 
-      ungroup()
+      mutate("{margin}" := as.character(.data[[margin]])) %>% 
+      ungroup())
     
     allyr_table_2 <- rbind(allyr_table_2, c("**Total**", ar, colSums(allyr_table_2[,3]), colSums(allyr_table_2[,4])))
-    allyr_table_2 <- allyr_table_2 %>% filter(FMP =="**Total**")
+    allyr_table_2 <- allyr_table_2 %>% filter(.data[[margin]] =="**Total**")
     allyr_table <- rbind(allyr_table, allyr_table_2)
     }
   }
+
+  allyr_table <- allyr_table %>% select(-.data[[margin]]) %>% mutate(`All Year Revenue` = round(as.double(`All Year Revenue`), digits = -3)) %>% mutate(`All Year Landings (Pounds)` = round(as.double(`All Year Landings (Pounds)`), digits = -3))
+  allyr_table <- rbind(allyr_table, c('**Total**', colSums(allyr_table[,2]), colSums(allyr_table[,3])))
+  
   # Format columns
   allyr_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyr_table$`All Year Revenue`))
   allyr_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyr_table$`All Year Landings (Pounds)`))
   
   # Make bottom rows bold
+  allyr_table[nrow(allyr_table),2] <- paste0("**", allyr_table[nrow(allyr_table),2],"**")
   allyr_table[nrow(allyr_table),3] <- paste0("**", allyr_table[nrow(allyr_table),3],"**")
-  allyr_table[nrow(allyr_table),4] <- paste0("**", allyr_table[nrow(allyr_table),4],"**")
   
   # set dynamic varible names (cant use paste0 in rename in tidyverse)
   names(allyr_table)[names(allyr_table) == "Area"] <- paste0(proper(area_adjective), "Area")
   names(allyr_table)[names(allyr_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
   names(allyr_table)[names(allyr_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
   
-  print(kable(allyr_table, caption = paste0('Most Impacted FMPs ', numyear,' Year Landings and Revenue '), align=c('l', 'r', 'r')))  
+  print(kable(allyr_table, caption = paste0(section_name, ' ', numyear,' Year Revenue and Landings '), align=c('l', 'r', 'r')))  
   
   }
 
-
-```
-
-```{r top_fmp_summary, results='asis', eval = F} 
-#####################################################################
-################### Summary Section #################################
-#####################################################################
-cat("*Summary*")
-
-# Total Revenue and Landings by Top 5 Most Impacted FMPs 
-
-# rm(piifmp_allyrs) 
- 
-# names(REVENUEFILE)
-# unique(REVENUEFILE$FMP)
-
-# create list aggrigated by year and FMP of FMPs with PII sensitive listings removed 
-piifmp_allyrs <- subset(REVENUEFILE, !is.na(FMP)) %>%
-  # dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT ) %>%
-  dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
-  group_by(FMP) %>%
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF =  npermits < 3) %>%
-  # mutate(CONF2 =  ndealers < 3) %>%
-  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
-  mutate(FMP_CONF = ifelse(CONF == T, 'All Others', FMP)) %>%
-  ungroup() %>%
-  # dplyr::select(-starts_with("FMP")) %>%
-  dplyr::select(InsideREV, InsideLANDED, npermits, ndealers, FMP_CONF) %>%
-  group_by(FMP_CONF) %>%
-  dplyr::summarize(
-    InsideREV_total = sum(InsideREV, na.rm = T),
-    InsideLANDED_total = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T),
-    ndealers = sum(ndealers, na.rm = T)
-    ) %>% 
-  arrange(desc( InsideREV_total, .by_group = TRUE)) %>%
-  dplyr::rename("FMP"= FMP_CONF, "All Year Revenue" = InsideREV_total, "All Year Landings (Pounds)" = InsideLANDED_total)  
-  # dplyr::rename("FMP"= FMP_CONF)
-
-# TODO: create excel table
-# remove permit number column
-# piifmp_allyrs <- piifmp_allyrs[ , !(names(piifmp_allyrs) %in% "npermits" )]
-# piifmp_allyrs <- piifmp_allyrs[ , !(names(piifmp_allyrs) %in% c("npermits","ndealers") )]
-# remove extra columns
-piifmp_allyrs <- piifmp_allyrs %>% dplyr::select("FMP", "All Year Revenue", "All Year Landings (Pounds)")
-
-allyrfmp_table <- head(piifmp_allyrs[order(-piifmp_allyrs$'All Year Revenue'),],5)
-
-topfmp_names <- unique(allyrfmp_table$FMP)
-
-# make FMP names lowercase
-# allyrfmp_table$FMP <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(allyrfmp_table$FMP), perl=TRUE)
-# allyrfmp_table$FMP[allyrfmp_table$FMP=="None"] <- "No Federal FMP"
-
-
-allyrfmp_table <- rbind(allyrfmp_table, c("**Total**", colSums(allyrfmp_table[,2]), colSums(allyrfmp_table[,3])))
-allyrfmp_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyrfmp_table$`All Year Revenue`))
-allyrfmp_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyrfmp_table$`All Year Landings (Pounds)`))
-# Make bottom rows bold
-allyrfmp_table[nrow(allyrfmp_table),2] <- paste0("**",allyrfmp_table[nrow(allyrfmp_table),2],"**")
-allyrfmp_table[nrow(allyrfmp_table),3] <- paste0("**",allyrfmp_table[nrow(allyrfmp_table),3],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrfmp_table)[names(allyrfmp_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
-names(allyrfmp_table)[names(allyrfmp_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
-
-if (number_of_areas > 1) {
-cat("\n\n")
-print(kable(allyrfmp_table, caption = paste0("Most Impacted FMPs ", numyear, " Year Landings and Revenue, All ", proper(area_adjective), "Areas "), align=c('l', 'r', 'r')))
-} # end number of areas check
-
-cat("\n\n")
-
-########## Sum Rev and Landings by area #############
-allyrarea_table <- subset(REVENUEFILE, !is.na(FMP)) %>%
-  # dplyr::select(FMP, Area, InsideREV, InsideLANDED, PERMIT ) %>%
-  dplyr::select(FMP, Area, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
-  filter(Area != "Other") %>% 
-  filter(FMP %in% topfmp_names) %>% 
-  group_by(Area) %>%
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF =  npermits < 3) %>%
-  # mutate(CONF2 =  ndealers < 3) %>%
-  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
-  mutate(Area_CONF = ifelse(CONF == T, 'All Others', Area)) %>%
-  ungroup() %>%
-  # dplyr::select(-starts_with("FMP")) %>%
-  dplyr::select(Area, InsideREV, InsideLANDED, npermits, ndealers, Area_CONF) %>%
-  group_by(Area_CONF) %>%
-  dplyr::summarize(
-    InsideREV_total = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T),
-    ndealers = sum(ndealers, na.rm = T)) %>%
-  dplyr::rename("All Year Revenue" = InsideREV_total, "All Year Landings (Pounds)" = InsideLANDED, "Area" = Area_CONF)
-
-# remove underscores
-allyrarea_table$`Area` <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", allyrarea_table$`Area`)), perl=TRUE) # make name pretty
-
-#TODO: create excel table??
-# names(allyrarea_table)
-# remove permit column
-allyrarea_table <- allyrarea_table %>% dplyr::select('Area', 'All Year Revenue', 'All Year Landings (Pounds)')
-
-# Create totals column
-allyrarea_table <- rbind(allyrarea_table, c('**Total**', colSums(allyrarea_table[,2]), colSums(allyrarea_table[,3])))
-# Format columns
-allyrarea_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyrarea_table$`All Year Revenue`))
-allyrarea_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyrarea_table$`All Year Landings (Pounds)`))
-# Remove underscores from area names
-allyrarea_table$`Area` <- gsub("_"," ", allyrarea_table$`Area`)
-# allyrarea_table
-# Make bottom rows bold
-allyrarea_table[nrow(allyrarea_table),2] <- paste0("**",allyrarea_table[nrow(allyrarea_table),2],"**")
-allyrarea_table[nrow(allyrarea_table),3] <- paste0("**",allyrarea_table[nrow(allyrarea_table),3],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrarea_table)[names(allyrarea_table) == "Area"] <- paste0(proper(area_adjective), "Area")
-# names(allyrarea_table)[names(allyrarea_table) == "All Year Total"] <- paste0(numyear, " Year Total")
-names(allyrarea_table)[names(allyrarea_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
-names(allyrarea_table)[names(allyrarea_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
-
-if (number_of_areas > 1) {
-  print(kable(allyrarea_table, caption = paste0('Most Impacted FMPs ', numyear,' Year Landings and Revenue '), align=c('l', 'r', 'r')))  
-} else {
-  single_area_table <- as.data.frame(allyrarea_table[-1,-1])
-  row.names(single_area_table) <- "**Total**"
-  print(kable(single_area_table, caption = paste0('Most Impacted FMPs ', numyear,' Year Landings and Revenue '), align=c('r', 'r')))
-
-}
-
-```
-
-<br> 
-
-```{r echo=FALSE} 
-# get other fmp names
-# unique(fmp_merge$FMP) %notin% all_topfmp_names
-
-otherfmpsnames <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(unique(fmp_merge$FMP) %notin% all_topfmp_names), perl=TRUE)
-otherfmpsnames[otherfmpsnames=="None"] <- "No Federal FMP"
-
-# otherfmpsnames[length(otherfmpsnames)]
-
-# ifelse(any(otherfmpsnames %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in ----)."),".")
-# ifelse(any(otherfmpsnames %in% "All Others"), paste0(" The category \"All Others\" refers FMPs with less than three permits impacted"),".")
-
 ```
 
 
-```{r other_impacted_fmps_dynamic_text, results='asis', eval = T} 
+```{r other_impacted_fmps_dynamic_text, results='asis', echo=FALSE, eval = T} 
 
 # paste0(otherfmpsnames[-length(otherfmpsnames)], collapse = ", ")` 
 # 
@@ -2730,17 +3021,28 @@ otherfmpsnames[otherfmpsnames=="None"] <- "No Federal FMP"
 
 # ifelse(any(otherfmpsnames %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in the ", wind_area_name, "  area)."),".")
 
+otherfmpsnames <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(unique(fmp_merge$FMP) %notin% top_five_fmp_names), perl=TRUE)
+otherfmpsnames[otherfmpsnames=="None"] <- "No Federal FMP"
+
 ```
 
-### Other Impacted FMPs 
+<!-- ### Other Impacted FMPs  -->
  
-We analyzed other impacted FMPs separately in order to better visualize the estimated landings and revenues. The other impacted FMPs are: `r paste0(otherfmpsnames[-length(otherfmpsnames)], collapse = ", ")` 
-`r paste0(" and ", otherfmpsnames[length(otherfmpsnames)])`. `r ifelse(any(otherfmpsnames %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in the ", wind_area_name, " area)."),"")`
-`r ifelse(any(otherfmpsnames %in% "All Others"), paste0(" The category \"All Others\" refers to FMPs with less than three permits or dealers impacted to protect data confidentiality. "),".")` `r revenue_deflation_note` `r rounded_message` 
+<!-- We analyzed other impacted FMPs separately in order to better visualize the estimated landings and revenues. The other impacted FMPs are: `r paste0(otherfmpsnames[-length(otherfmpsnames)], collapse = ", ")`  -->
+<!-- `r paste0(" and ", otherfmpsnames[length(otherfmpsnames)])`. `r ifelse(any(otherfmpsnames %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in the ", wind_area_name, " area)."),"")` -->
+<!-- `r ifelse(any(otherfmpsnames %in% "All Others"), paste0(" The category \"All Others\" refers to FMPs with less than three permits or dealers impacted to protect data confidentiality. "),".")` `r revenue_deflation_note` `r rounded_message`  -->
 
-```{r other_impacted_fmps, results='asis', eval = T} 
+```{r other_impacted_fmps, results='asis', eval = other_fmp_section} 
+
+cat("<br> \n\n") 
+
+cat("### Other Impacted FMPs \n")
+
+cat("We analyzed other impacted FMPs separately in order to better visualize the estimated landings and revenues. The other impacted FMPs are: ", paste0(otherfmpsnames[-length(otherfmpsnames)], collapse = ", "), 
+paste0(" and ", otherfmpsnames[length(otherfmpsnames)]),". ", ifelse(any(otherfmpsnames %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in the ", wind_area_name, " area)."),""), 
+ifelse(any(otherfmpsnames %in% "All Others"), paste0("The category \"All Others\" refers to FMPs with less than three permits or dealers impacted to protect data confidentiality. "),"."), revenue_deflation_note, rounded_message)
  
-cat("<br>")
+cat("<br> ")
 
 # We analyzed other impacted FMPs separately in order to better visualize the estimated landings and revenues. The other impacted FMPs are: Atlantic Herring, NE (Northeast); Monkfish, Joint; Skate, NE; NE Multispecies, Small; NE Multispecies, Large; Spiny Dogfish, Joint; Bluefish, Mid-Atlantic; Golden Tilefish, Mid-Atlantic; Red Crab, NE; River Herring, Joint; and Highly Migratory Species.
 
@@ -2892,7 +3194,7 @@ quantOtherScale <- scale_fill_brewer(name = NULL, palette = "RdYlBu",
 ###########################################
 
 # get names of all other fmp names other than top FMPs
-otherfmpnames <- unique(fmp_merge$FMP) %notin% topFMPNames
+otherfmpnames <- unique(fmp_merge$FMP) %notin% top_five_fmp_names
 
 # get vector of all zones except "Other"
 # allZones <- unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ]
@@ -2988,7 +3290,7 @@ lp <- ggplot(otherFMP, aes(x = Year, y = yfa_land/1000000, fill = FMP)) +
         # plot.title = element_text(hjust = 0.5, size=18))
         plot.title = element_text())
         # panel.border = element_rect(colour = "black", size=0))
-# lp assignedColors=FALSE
+# lp
 
 # if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
 if (assignedColors) {
@@ -3142,22 +3444,80 @@ cat("\n\n\n\n")
 
 ```
 
-```{r other_fmp_summary_2, results='asis', eval = summary_tables} 
+```{r other_fmp_summary, results='asis', eval = other_fmp_section_summary} 
 
-cat("<br>")
+section_name = "Other Impacted FMPs"
+section_table <- get("otherFMP_table") %>% ungroup()
+margin <- "FMP"
+
+cat("<br>") 
 
 cat("*Summary*")
 
-if (number_of_areas == 1) {
-  all_rev <- allyrrev_table %>% filter(FMP =="**Total**") %>% select(-FMP)
-  all_land <- allyrland_table %>% filter(FMP =="**Total**") %>% select(-FMP)
+if (single_area_summaries) {
+  all_rev <- allyrrev_table %>% filter(.data[[margin]] == '**Total**') %>% select(-.data[[margin]])
+  all_land <- allyrland_table %>% filter(.data[[margin]] =="**Total**") %>% select(-.data[[margin]])
   rev_land_total <- cbind(all_rev, all_land)
   row.names(rev_land_total) <- "**Total**"
-  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', 'Other Impacted FMPs '), align=c('r', 'r')))
-}
+  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', section_name, ' '), align=c('r', 'r')))
+} else {
+  counter = 1
+  for (ar in allZones) {
+    if (counter == 1) {
+      ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
+    allyr_table <- as_tibble(section_table %>%  
+      select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%     # use .data[[margin]] to refer to column name stored as string
+      filter(Area == ar_u) %>% 
+      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
+      arrange(desc(allyrtotal_land)) %>%
+      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
+      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
+      mutate("{margin}" := as.character(.data[[margin]])) %>% # use '"{margin}" :=' to refer to a column as a string
+      ungroup()) # have to convert to tibble to add up rows
+    allyr_table <- rbind(allyr_table, c("**Total**", ar, colSums(allyr_table[,3]), colSums(allyr_table[,4])))
+    allyr_table <- allyr_table %>% filter(.data[[margin]] =="**Total**")
+    counter = 2
+  } else {
+    ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
+    allyr_table_2 <- as_tibble(section_table %>%  
+      filter(Area == ar_u) %>% 
+      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
+      arrange(desc(allyrtotal_land)) %>%
+      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
+      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
+      mutate("{margin}" := as.character(.data[[margin]])) %>% 
+      ungroup())
+    
+    allyr_table_2 <- rbind(allyr_table_2, c("**Total**", ar, colSums(allyr_table_2[,3]), colSums(allyr_table_2[,4])))
+    allyr_table_2 <- allyr_table_2 %>% filter(.data[[margin]] =="**Total**")
+    allyr_table <- rbind(allyr_table, allyr_table_2)
+    }
+  }
+
+  allyr_table <- allyr_table %>% select(-.data[[margin]]) %>% mutate(`All Year Revenue` = round(as.double(`All Year Revenue`), digits = -3)) %>% mutate(`All Year Landings (Pounds)` = round(as.double(`All Year Landings (Pounds)`), digits = -3))
+  allyr_table <- rbind(allyr_table, c('**Total**', colSums(allyr_table[,2]), colSums(allyr_table[,3])))
+  
+  # Format columns
+  allyr_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyr_table$`All Year Revenue`))
+  allyr_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyr_table$`All Year Landings (Pounds)`))
+  
+  # Make bottom rows bold
+  allyr_table[nrow(allyr_table),2] <- paste0("**", allyr_table[nrow(allyr_table),2],"**")
+  allyr_table[nrow(allyr_table),3] <- paste0("**", allyr_table[nrow(allyr_table),3],"**")
+  
+  # set dynamic varible names (cant use paste0 in rename in tidyverse)
+  names(allyr_table)[names(allyr_table) == "Area"] <- paste0(proper(area_adjective), "Area")
+  names(allyr_table)[names(allyr_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
+  names(allyr_table)[names(allyr_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
+  
+  print(kable(allyr_table, caption = paste0(section_name, ' ', numyear,' Year Revenue and Landings '), align=c('l', 'r', 'r')))  
+  
+  }
+
 
 
 ```
+
 
 ```{r top_species_dynamic_text, results='asis', eval = top_species_section} 
 
@@ -3224,28 +3584,6 @@ figure_num = 0
 #############################
 ###### Set Top Species ######
 #############################
-
-# pii_all_yr_area_top_species <- subset(REVENUEFILE, !is.na(SPPNM)) %>% 
-#   dplyr::select(SPPNM, InsideREV, InsideLANDED, PERMIT, Area ) %>% 
-#   filter(Area != "Other") %>% 
-#   group_by(SPPNM) %>% 
-#   dplyr::summarize(
-#     InsideREV = sum(InsideREV, na.rm = T),
-#     InsideLANDED = sum(InsideLANDED, na.rm = T),
-#     npermits = length(unique(PERMIT)),
-#     ) %>%
-#   mutate(CONF =  npermits < 3) %>%
-#   mutate(SPPNM_CONF = ifelse(CONF == T, 'All Others', SPPNM)) %>%
-#   ungroup() %>%
-#   group_by(SPPNM_CONF) %>%
-#   dplyr::summarize(
-#     yfa_rev = sum(InsideREV, na.rm = T),
-#     yfa_land = sum(InsideLANDED, na.rm = T),
-#     npermits = sum(npermits, na.rm = T)) %>% 
-#   dplyr::rename("Species"= SPPNM_CONF) %>% 
-#   arrange(desc(yfa_rev)) %>% 
-#   top_n(n=number_of_top_species, wt=yfa_rev) %>% 
-#   pull(Species)
 
 pii_all_yr_area_top_species <- subset(REVENUEFILE, !is.na(SPPNM)) %>%
   dplyr::select(SPPNM, Area, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>%
@@ -3351,26 +3689,6 @@ selectSpeciesbyArea <- species_merge %>%
   mutate(Species = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(Species), perl=TRUE))
 
 # count of number of unique Species between each area
-# selectSpeciesbyArea <- within(selectSpeciesbyArea, { count <- ave(Area, Species, FUN=function(x) length(unique(x)))})
-# pull(selectSpeciesbyArea[selectSpeciesbyArea$count==1,"Species"]) # get vector of Species not shared by all areas
-
-# NumUniqueMargins <- length(unique(selectSpeciesbyArea$Species))
-# 
-# UniqueMargins <- unique(selectSpeciesbyArea$Species)
-# 
-# # make extra colors if more unique Speciess than maximum colors for palette
-# if (NumUniqueMargins > maxUniqueColors) {
-#   getPalette = colorRampPalette(brewer.pal(maxUniqueColors, paletteName3))
-#   myColors <- getPalette(NumUniqueMargins) 
-# } else {
-#   myColors <- brewer.pal(NumUniqueMargins, paletteName3) # create list of colors using number of unique Speciess from pallettte name
-# }
-# 
-# names(myColors) <- UniqueMargins # name colors for color scale
-# 
-# uniqueTopSpeciesScale <- scale_fill_manual(name = NULL, values = myColors, guide = guide_legend(reverse = TRUE))
-
-
 uniqueTopSpeciesScale <- make_color_scale(selectSpeciesbyArea$Species, maxUniqueColors = maxUniqueColors)
 
 # original color scale based on revenue quanities
@@ -3582,17 +3900,74 @@ cat("\n\n\n\n\n\n")
 
 ```{r top_species_summary, results='asis', eval = top_species_section_summary} 
 
-cat("<br>")
+section_name = "Most Impacted Species"
+section_table <- get("species_merge") %>% ungroup()
+margin <- "Species"
+
+cat("<br>") 
 
 cat("*Summary*")
 
-if (number_of_areas == 1) {
-  all_rev <- allyrrev_table %>% filter(Species =="**Total**") %>% select(-Species)
-  all_land <- allyrland_table %>% filter(Species =="**Total**") %>% select(-Species)
+if (single_area_summaries) {
+  all_rev <- allyrrev_table %>% filter(.data[[margin]] == '**Total**') %>% select(-.data[[margin]])
+  all_land <- allyrland_table %>% filter(.data[[margin]] =="**Total**") %>% select(-.data[[margin]])
   rev_land_total <- cbind(all_rev, all_land)
   row.names(rev_land_total) <- "**Total**"
-  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', 'Top Species '), align=c('r', 'r')))
-}
+  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', section_name, ' '), align=c('r', 'r')))
+} else {
+  counter = 1
+  for (ar in allZones) {
+    if (counter == 1) {
+      ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
+    allyr_table <- as_tibble(section_table %>%  
+      select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%     # use .data[[margin]] to refer to column name stored as string
+      filter(Area == ar_u) %>% 
+      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
+      arrange(desc(allyrtotal_land)) %>%
+      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
+      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
+      mutate("{margin}" := as.character(.data[[margin]])) %>% # use '"{margin}" :=' to refer to a column as a string
+      ungroup()) # have to convert to tibble to add up rows
+    allyr_table <- rbind(allyr_table, c("**Total**", ar, colSums(allyr_table[,3]), colSums(allyr_table[,4])))
+    allyr_table <- allyr_table %>% filter(.data[[margin]] =="**Total**")
+    counter = 2
+  } else {
+    ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
+    allyr_table_2 <- as_tibble(section_table %>%  
+      filter(Area == ar_u) %>% 
+      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
+      arrange(desc(allyrtotal_land)) %>%
+      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
+      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
+      mutate("{margin}" := as.character(.data[[margin]])) %>% 
+      ungroup())
+    
+    allyr_table_2 <- rbind(allyr_table_2, c("**Total**", ar, colSums(allyr_table_2[,3]), colSums(allyr_table_2[,4])))
+    allyr_table_2 <- allyr_table_2 %>% filter(.data[[margin]] =="**Total**")
+    allyr_table <- rbind(allyr_table, allyr_table_2)
+    }
+  }
+
+  allyr_table <- allyr_table %>% select(-.data[[margin]]) %>% mutate(`All Year Revenue` = round(as.double(`All Year Revenue`), digits = -3)) %>% mutate(`All Year Landings (Pounds)` = round(as.double(`All Year Landings (Pounds)`), digits = -3))
+  allyr_table <- rbind(allyr_table, c('**Total**', colSums(allyr_table[,2]), colSums(allyr_table[,3])))
+  
+  # Format columns
+  allyr_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyr_table$`All Year Revenue`))
+  allyr_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyr_table$`All Year Landings (Pounds)`))
+  
+  # Make bottom rows bold
+  allyr_table[nrow(allyr_table),2] <- paste0("**", allyr_table[nrow(allyr_table),2],"**")
+  allyr_table[nrow(allyr_table),3] <- paste0("**", allyr_table[nrow(allyr_table),3],"**")
+  
+  # set dynamic varible names (cant use paste0 in rename in tidyverse)
+  names(allyr_table)[names(allyr_table) == "Area"] <- paste0(proper(area_adjective), "Area")
+  names(allyr_table)[names(allyr_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
+  names(allyr_table)[names(allyr_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
+  
+  print(kable(allyr_table, caption = paste0(section_name, ' ', numyear,' Year Revenue and Landings '), align=c('l', 'r', 'r')))  
+  
+  }
+
 
 ```
 
@@ -3954,15 +4329,75 @@ cat("<br> ")
 
 ```{r selected_species_summary, results='asis', eval = select_species_section_summary} 
 
+section_name = "Select Species"
+section_table <- get("species_merge") %>% ungroup()
+margin <- "Species"
+
+cat("<br>") 
+
 cat("*Summary*")
 
-if (number_of_areas == 1) {
-  all_rev <- allyrrev_table %>% filter(Species =="**Total**") %>% select(-Species)
-  all_land <- allyrland_table %>% filter(Species =="**Total**") %>% select(-Species)
+if (single_area_summaries) {
+  all_rev <- allyrrev_table %>% filter(.data[[margin]] == '**Total**') %>% select(-.data[[margin]])
+  all_land <- allyrland_table %>% filter(.data[[margin]] =="**Total**") %>% select(-.data[[margin]])
   rev_land_total <- cbind(all_rev, all_land)
   row.names(rev_land_total) <- "**Total**"
-  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', 'Top Species '), align=c('r', 'r')))
-}
+  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', section_name, ' '), align=c('r', 'r')))
+} else {
+  counter = 1
+  for (ar in allZones) {
+    if (counter == 1) {
+      ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
+    allyr_table <- as_tibble(section_table %>%  
+      select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%     # use .data[[margin]] to refer to column name stored as string
+      filter(Area == ar_u) %>% 
+      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
+      arrange(desc(allyrtotal_land)) %>%
+      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
+      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
+      mutate("{margin}" := as.character(.data[[margin]])) %>% # use '"{margin}" :=' to refer to a column as a string
+      ungroup()) # have to convert to tibble to add up rows
+    allyr_table <- rbind(allyr_table, c("**Total**", ar, colSums(allyr_table[,3]), colSums(allyr_table[,4])))
+    allyr_table <- allyr_table %>% filter(.data[[margin]] =="**Total**")
+    counter = 2
+  } else {
+    ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
+    allyr_table_2 <- as_tibble(section_table %>%  
+      filter(Area == ar_u) %>% 
+      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
+      arrange(desc(allyrtotal_land)) %>%
+      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
+      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
+      mutate("{margin}" := as.character(.data[[margin]])) %>% 
+      ungroup())
+    
+    allyr_table_2 <- rbind(allyr_table_2, c("**Total**", ar, colSums(allyr_table_2[,3]), colSums(allyr_table_2[,4])))
+    allyr_table_2 <- allyr_table_2 %>% filter(.data[[margin]] =="**Total**")
+    allyr_table <- rbind(allyr_table, allyr_table_2)
+    }
+  }
+
+  allyr_table <- allyr_table %>% select(-.data[[margin]]) %>% mutate(`All Year Revenue` = round(as.double(`All Year Revenue`), digits = -3)) %>% mutate(`All Year Landings (Pounds)` = round(as.double(`All Year Landings (Pounds)`), digits = -3))
+  allyr_table <- rbind(allyr_table, c('**Total**', colSums(allyr_table[,2]), colSums(allyr_table[,3])))
+  
+  # Format columns
+  allyr_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyr_table$`All Year Revenue`))
+  allyr_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyr_table$`All Year Landings (Pounds)`))
+  
+  # Make bottom rows bold
+  allyr_table[nrow(allyr_table),2] <- paste0("**", allyr_table[nrow(allyr_table),2],"**")
+  allyr_table[nrow(allyr_table),3] <- paste0("**", allyr_table[nrow(allyr_table),3],"**")
+  
+  # set dynamic varible names (cant use paste0 in rename in tidyverse)
+  names(allyr_table)[names(allyr_table) == "Area"] <- paste0(proper(area_adjective), "Area")
+  names(allyr_table)[names(allyr_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
+  names(allyr_table)[names(allyr_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
+  
+  print(kable(allyr_table, caption = paste0(section_name, ' ', numyear,' Year Revenue and Landings '), align=c('l', 'r', 'r')))  
+  
+  }
+
+
 
 ```
 
@@ -4320,16 +4755,73 @@ cat("\n\n\n\n\n\n")
 
 ```{r select_gear_code_summary, results='asis', eval = select_gear_section_summary} 
 
+section_name = "Select Gear Types"
+section_table <- get("gear_type_merge") %>% ungroup()
+margin <- "Gear_Type"
+
+cat("<br>") 
+
 cat("*Summary*")
 
-if (number_of_areas == 1) {
-  all_rev <- allyrrev_table %>% filter(`Gear Type` =="**Total**") %>% select(-`Gear Type`)
-  all_land <- allyrland_table %>% filter(`Gear Type` =="**Total**") %>% select(-`Gear Type`)
+if (single_area_summaries) {
+  all_rev <- allyrrev_table %>% filter(.data[[margin]] == '**Total**') %>% select(-.data[[margin]])
+  all_land <- allyrland_table %>% filter(.data[[margin]] =="**Total**") %>% select(-.data[[margin]])
   rev_land_total <- cbind(all_rev, all_land)
   row.names(rev_land_total) <- "**Total**"
-  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', 'Select Gear Code '), align=c('r', 'r')))
-}
+  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', section_name, ' '), align=c('r', 'r')))
+} else {
+  counter = 1
+  for (ar in allZones) {
+    if (counter == 1) {
+      ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
+    allyr_table <- as_tibble(section_table %>%  
+      select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%     # use .data[[margin]] to refer to column name stored as string
+      filter(Area == ar_u) %>% 
+      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
+      arrange(desc(allyrtotal_land)) %>%
+      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
+      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
+      mutate("{margin}" := as.character(.data[[margin]])) %>% # use '"{margin}" :=' to refer to a column as a string
+      ungroup()) # have to convert to tibble to add up rows
+    allyr_table <- rbind(allyr_table, c("**Total**", ar, colSums(allyr_table[,3]), colSums(allyr_table[,4])))
+    allyr_table <- allyr_table %>% filter(.data[[margin]] =="**Total**")
+    counter = 2
+  } else {
+    ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
+    allyr_table_2 <- as_tibble(section_table %>%  
+      filter(Area == ar_u) %>% 
+      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
+      arrange(desc(allyrtotal_land)) %>%
+      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
+      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
+      mutate("{margin}" := as.character(.data[[margin]])) %>% 
+      ungroup())
+    
+    allyr_table_2 <- rbind(allyr_table_2, c("**Total**", ar, colSums(allyr_table_2[,3]), colSums(allyr_table_2[,4])))
+    allyr_table_2 <- allyr_table_2 %>% filter(.data[[margin]] =="**Total**")
+    allyr_table <- rbind(allyr_table, allyr_table_2)
+    }
+  }
 
+  allyr_table <- allyr_table %>% select(-.data[[margin]]) %>% mutate(`All Year Revenue` = round(as.double(`All Year Revenue`), digits = -3)) %>% mutate(`All Year Landings (Pounds)` = round(as.double(`All Year Landings (Pounds)`), digits = -3))
+  allyr_table <- rbind(allyr_table, c('**Total**', colSums(allyr_table[,2]), colSums(allyr_table[,3])))
+  
+  # Format columns
+  allyr_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyr_table$`All Year Revenue`))
+  allyr_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyr_table$`All Year Landings (Pounds)`))
+  
+  # Make bottom rows bold
+  allyr_table[nrow(allyr_table),2] <- paste0("**", allyr_table[nrow(allyr_table),2],"**")
+  allyr_table[nrow(allyr_table),3] <- paste0("**", allyr_table[nrow(allyr_table),3],"**")
+  
+  # set dynamic varible names (cant use paste0 in rename in tidyverse)
+  names(allyr_table)[names(allyr_table) == "Area"] <- paste0(proper(area_adjective), "Area")
+  names(allyr_table)[names(allyr_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
+  names(allyr_table)[names(allyr_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
+  
+  print(kable(allyr_table, caption = paste0(section_name, ' ', numyear,' Year Revenue and Landings '), align=c('l', 'r', 'r')))  
+  
+  }
 ```
 
 ```{r bottom_tending_mobile_gear, results='asis', eval = F} 
@@ -4367,7 +4859,7 @@ bottomGear <- c("DRO", "DRS", "DSC", "DTC", "DTS", "OHS", "OTB", "OTC", "OTF", "
 # PIISPPNMAllYears[which(PIISPPNMAllYears$FMP == 'MONKFISH JOINT'),"InsideREV_total"] <- PIISPPNMAllYears[which(PIISPPNMAllYears$FMP=='MONKFISH JOINT'),"InsideREV_total"]-227014.9999
 
 # PII fixed for all areas
-piigearids <- subset(REVENUEFILE, !is.na(FMP)) %>%
+piigearids <- REVENUEFILE %>%
   dplyr::select(FMP, GEARCODE, Year, InsideREV, InsideLANDED, PERMIT, Area) %>%
   # dplyr::select(GEARCODE, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
   filter(Area != "Other") %>% 
@@ -4941,7 +5433,7 @@ output_fpermit = file.path(output_f, "permit")
 # }
 
 # PII fixed for all areas
-piipermitAllyear <- subset(REVENUEFILE, !is.na(FMP)) %>%
+piipermitAllyear <- REVENUEFILE %>%
   dplyr::select(Year, REVENUE, InsideREV, InsideLANDED, PERMIT, Area) %>%
   # dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
   # dplyr::select(Year, PERMIT, Area) %>%
@@ -5239,7 +5731,7 @@ cat("\n\n\n")
 
 # test <- REVENUEFILE %>% filter(is.na(TRIPID))
 
-vessel_trip_all_areas_by_year <- subset(REVENUEFILE, !is.na(FMP)) %>% 
+vessel_trip_all_areas_by_year <- REVENUEFILE %>% 
   # filter(Area == zone) %>%   # filter by area
   filter(Area != "Other") %>% 
   dplyr::select(IDNUM, PERMIT, Year, Area) %>%
@@ -5255,7 +5747,7 @@ vessel_trip_all_areas_by_year <- subset(REVENUEFILE, !is.na(FMP)) %>%
   dplyr::rename("Number of Trips"= nTrips,
                 "Number of Vessels" = nVessels)
 
-vessel_trip_all_areas_by_year_fmp <- subset(REVENUEFILE, !is.na(FMP)) %>%
+vessel_trip_all_areas_by_year_fmp <- REVENUEFILE %>%
   # filter(Area == zone) %>% 
   filter(Area != "Other") %>% 
   dplyr::select(IDNUM, FMP, PERMIT, Year, Area, DEALNUM) %>%
@@ -5284,7 +5776,7 @@ vessel_trip_all_areas_by_year_fmp <- subset(REVENUEFILE, !is.na(FMP)) %>%
   dplyr::rename("Number of Trips"= nTrips,
                 "Number of Vessels" = nVessels)
 
-vessel_trip_all_areas_by_year_sppnm <- subset(REVENUEFILE, !is.na(FMP)) %>%
+vessel_trip_all_areas_by_year_sppnm <- REVENUEFILE %>%
   # filter(Area == zone) %>% 
   filter(Area != "Other") %>% 
   dplyr::select(IDNUM, SPPNM, PERMIT, Year, Area, DEALNUM) %>%
@@ -5316,7 +5808,7 @@ vessel_trip_all_areas_by_year_sppnm <- subset(REVENUEFILE, !is.na(FMP)) %>%
   dplyr::rename("Number of Trips"= nTrips,
                 "Number of Vessels" = nVessels)
 
-vessel_trip_all_areas_by_year_port <- subset(REVENUEFILE, !is.na(FMP)) %>%
+vessel_trip_all_areas_by_year_port <- REVENUEFILE %>%
   # filter(Area == zone) %>% 
   filter(Area != "Other") %>% 
   dplyr::select(Year, PORTLND1, STATE1, IDNUM, PERMIT, Area, DEALNUM) %>%
@@ -5544,7 +6036,7 @@ cat("<br> ")
 # seperate tables by year
 seperate_tables_by_year = TRUE
 
-vessel_trip_all_areas_by_year <- subset(REVENUEFILE, !is.na(FMP)) %>% 
+vessel_trip_all_areas_by_year <- REVENUEFILE %>% 
   # filter(Area == zone) %>%   # filter by area
   filter(Area != "Other") %>% 
   dplyr::select(IDNUM, PERMIT, Year, Area) %>%
@@ -5560,7 +6052,7 @@ vessel_trip_all_areas_by_year <- subset(REVENUEFILE, !is.na(FMP)) %>%
   dplyr::rename("Number of Trips"= nTrips,
                 "Number of Vessels" = nVessels)
 
-vessel_trip_all_areas_by_year_fmp <- subset(REVENUEFILE, !is.na(FMP)) %>%
+vessel_trip_all_areas_by_year_fmp <- REVENUEFILE %>%
   # filter(Area == zone) %>% 
   filter(Area != "Other") %>% 
   # dplyr::select(IDNUM, FMP, PERMIT, Year, Area) %>%
@@ -5591,7 +6083,7 @@ vessel_trip_all_areas_by_year_fmp <- subset(REVENUEFILE, !is.na(FMP)) %>%
   dplyr::rename("Number of Trips"= nTrips,
                 "Number of Vessels" = nVessels)
 
-vessel_trip_all_areas_by_year_sppnm <- subset(REVENUEFILE, !is.na(FMP)) %>%
+vessel_trip_all_areas_by_year_sppnm <- REVENUEFILE %>%
   # filter(Area == zone) %>% 
   filter(Area != "Other") %>% 
   # dplyr::select(IDNUM, SPPNM, PERMIT, Year, Area) %>%
@@ -5624,7 +6116,7 @@ vessel_trip_all_areas_by_year_sppnm <- subset(REVENUEFILE, !is.na(FMP)) %>%
   dplyr::rename("Number of Trips"= nTrips,
                 "Number of Vessels" = nVessels)
 
-vessel_trip_all_areas_by_year_port <- subset(REVENUEFILE, !is.na(FMP)) %>%
+vessel_trip_all_areas_by_year_port <- REVENUEFILE %>%
   # filter(Area == zone) %>% 
   filter(Area != "Other") %>% 
   # dplyr::select(Year, PORTLND1, STATE1, IDNUM, PERMIT, Area) %>%
