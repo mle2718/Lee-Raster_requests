@@ -27,7 +27,7 @@ if(!require(offshoreWind)) {
   require(offshoreWind)}
 
 PKG <- c("foreign", "data.table", "dichromat", "RColorBrewer", "lattice", "scales",  "openxlsx", "sp", "rgdal", "raster","snowfall",
-         "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4","rasterVis","classInt")
+         "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4","rasterVis","classInt", "rgeos")
 for (p in PKG) {
   if(!require(p,character.only = TRUE)) {
     install.packages(p)
