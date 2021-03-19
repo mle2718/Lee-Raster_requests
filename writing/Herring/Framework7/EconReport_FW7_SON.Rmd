@@ -1259,9 +1259,9 @@ allZones <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", allZones1), perl=TRU
  
 ```
 
-```{r subset_revenuefile, include=FAlSE, eval = T}
+```{r subset_revenuefile, include=FALSE, eval = TRUE}
 REVENUEFILE <- REVENUEFILE[(which(REVENUEFILE$MONTH %in% c("9","10","11"))),]
-#REVENUEFILE_backup <- REVENUEFILE
+
 ```
 
 
