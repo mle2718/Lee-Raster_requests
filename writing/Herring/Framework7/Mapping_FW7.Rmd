@@ -1,0 +1,2710 @@
+---
+title: "Maps for Framework 7"
+author: Min-Yang Lee
+date: "`r format(Sys.time(), '%B %d, %Y')`" 
+output:
+  pdf_document:
+    keep_tex: TRUE
+    fig_caption: Yes
+  word_document: default
+  html_document: 
+   self_contained: TRUE
+   toc: TRUE
+   toc_float: TRUE
+urlcolor: blue
+editor_options:
+  chunk_output_type: console
+compact-title: FALSE
+---
+<!-- 
+This is the markdown document used to make raster maps for Herring FW7.  It uses the offshoreWind package
+-->
+
+```{r global_options, include=FALSE}
+
+# ### install offshoreWind package from Github if needed
+if(!require(offshoreWind)) {
+  if(!require(devtools)) {
+    install.packages("devtools")
+    require(devtools)}
+  install_github("dcorvi/offshoreWind")
+  require(offshoreWind)}
+
+PKG <- c("foreign", "data.table", "dichromat", "RColorBrewer", "lattice", "scales",  "openxlsx", "sp", "rgdal", "raster","snowfall",
+         "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4","rasterVis","classInt", "rgeos")
+for (p in PKG) {
+  if(!require(p,character.only = TRUE)) {
+    install.packages(p)
+    require(p,character.only = TRUE)}
+}
+#############################################################################
+#knitr options
+
+knitr::opts_chunk$set(echo=FALSE, warning = FALSE, error = FALSE, message = FALSE, comment = FALSE, cache = FALSE, progress = TRUE, verbose = FALSE, 
+											dpi = 600)
+options(tinytex.verbose = TRUE)
+# options(knitr.table.format = "latex")
+
+# knit: (function(inputFile, encoding) { rmarkdown::render(inputFile, encoding = encoding, output_file = file.path(dirname(inputFile), 'myfile.pdf')) })
+#############################################################################
+
+
+#############################################################################
+# figure out the OS 
+# Different setups based on whether you are using Windows or Not-windows
+desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
+
+  if (desktopUse) { # set the root path of the network, based on whether on desktop or server
+    network_location = "//155.206.139.2/"
+    system("ipconfig", intern = TRUE)
+  } else {
+    network_location = "//net/"
+  }
+#############################################################################
+
+#############################################################################
+# versioning options
+todaysdate <- as.Date(Sys.time())
+todaysdate<-"2021-03-17"
+#############################################################################
+# Paths, names, and locations of inputs and outputs
+offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
+project_root_path<-file.path(network_location,"home2","mlee","READ-SSB-Lee-Raster_requests")
+wind_area_hard_name = "Herring Framework 7"
+
+raster_manifest_location<-file.path(project_root_path,"raw_data")
+individual.raster.file="raster_manifest_2021-03-15.Rds"
+payloadRDS=file.path(raster_manifest_location,individual.raster.file)
+
+root.geotiff.path<-file.path(project_root_path,"geotiffs","Herring","Framework7")
+root.image.path = file.path(project_root_path,"images","Herring","Framework7")
+root.table.path = file.path(project_root_path,"tables","Herring","Framework7")
+
+ML.GIS.PATH<-file.path(network_location,"home2", "mlee", "spatial data")
+
+#############################################################################
+
+
+#############################################################################
+# GIS options, you  probably shouldn't change these. 
+
+BASE.RASTER = raster(file.path(network_location,"work5","socialsci","Geret_Rasters","Data","BASERASTER_AEA_2"))
+PROJ.USE = CRS('+proj=aea +lat_1=28 +lat_2=42 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs +ellps=GRS80 +towgs84=0,0,0 ') 
+# Albers Equal Area conic (in meters)
+
+#############################################################################
+
+
+START.YEAR<-2010
+#START.YEAR<-2018
+END.YEAR<-2019
+
+
+
+###################################################################################################
+############SETUP RASTER MAPPING AND CONFIDENTIALITY OPTIONS ######################################
+###################################################################################################
+  #rescale to "total [[ACTIVITY]] per square km" requires dividing by 4 because the grid cells are 0.25 km^2
+  rescale_factor<-4
+
+# Seed for subsampling
+    set.seed(24601)
+# Max nodes for raster confidentiality    
+    max.nodes<-8
+##################################
+
+### Setting up BINNING options: 
+
+# Number of breaks  -  for classifiying raster values into bins
+nbreaks=5
+
+# Subsample for Jenks Natural breaks classifications?  Set sampling-seed later
+num_jenks_subs=5000 # Maybe this should be higher; set to 1000 for the map production process. But, the higher the sample the longer it takes to run.
+
+# Here we exclude all cells <=1. (Later we deal with rasters with so few cells above the lower bound value,
+    # that we change the sample size to match the number of cells with those values.)
+jenks.lowerbound=1
+
+# Min and Max x and y values set to standardize plot extent # the plot extent is set, but then adjusted based on the location of points in the plotted region
+my.ylimit=c(250000,850000)
+my.xlimit=c(1900000,2450000)
+
+#cut point options 
+#my.at <- seq(10, 2500, 500) #this defines equal intervals from 10 to 2500 by 500 units.
+
+#turn things on or or off 
+myscaleopts <- list(draw=FALSE) #Don't draw axes
+#myscaleopts <- list(draw=TRUE)
+
+
+brewer.friendly.ygb <- c("#ffffff", brewer.pal(nbreaks, "YlGnBu"))
+my.friendly.YGB=rasterTheme(region=brewer.friendly.ygb)
+
+#color options (par.setting)
+mycoloropts <- c(my.friendly.YGB)
+our.max.pixels=8e8
+
+# PNG Image Size in pixel units (?) 
+png.height<-1800
+png.width<-1400
+
+## land color 
+mylandfill<- "#d1d1e0"
+############################
+
+
+# Number of color value "bins", plus 0-value will be added too.
+numclasses <- 5
+
+# Set Color Ramp Values 
+brewer.friendly.bupu <- c("#ffffff", brewer.pal(numclasses, "BuPu")) # Blue to purple  (low to high) 
+my.friendly.BUPU <- rasterTheme(region=brewer.friendly.bupu)
+ 
+mycoloropts <-  c(my.friendly.BUPU) 
+
+# Other Plotting Settings 
+myckey <- list(labels=list(cex=2)) # Set the size of color ramp labels (?)
+
+
+
+
+###################################################################################################
+############END OF SETUP RASTER MAPPING AND CONFIDENTIALITY OPTIONS ###############################
+###################################################################################################      
+      
+# Prep data for this vignette must be created with getCallAreaEffort function in the package
+# This must be done seperately from within the vignette and the results placed in a seperate folder 
+# because of the amount of time it takes for the function to run for each shape, which can take a couble of hours 
+# on the VENUS or MARS R servers or days on an 8 processor laptop, which also depends on the number and size of the requested shapefiles 
+
+# All sections should be able to run independtly from each other after the revenue table is built
+
+```	
+
+
+```{r getcallArea, eval = F}  
+#Dennis ran this on March 11, 2021
+#Plopping this in here, so I know how to find it if I have to update
+getCallAreaEffort(raster_folder =
+    file.path(network_location,"work5/socialsci/Geret_Rasters/Data/individualrasters",
+    shapefile_f = file.path(network_location,"home5/dcorvi/geret_data_request/HerringFW7",
+    output_f = file.path(network_location,"home5/dcorvi/geret_data_request/HerringFW7_output_CW",
+    start = 2010,
+    end = 2019)
+```
+
+
+```{r construct raster manifest, eval = F}  
+source(file.path(project_root_path,"R_code/raster_manifest.R")
+```
+
+
+
+```{r load_libraries_and_sign_in_to_Google, eval = T}  
+#------------------------------- Remember to enter a selection (1 or 0) to sign into Google in this code chunk -------------------------------# 
+
+
+# During the first run the user will be prompted to complete the OAuth process by signing into a Google account through a browser and create a token for Google access
+# the token will expire after a few months - when this happens, the user will get an error and have to detach and reattache (i.e. detach("package:googlesheets4", unload = TRUE) then library(googlesheets4)) the package and should enter 0 when prompted for selection.
+# Gsheet_BOEM_lease_area_table_id = "14MdREhJYjORPkb57n6NYEBSEVxeW3_Studsp0dB8KWc" # this is the id of the google sheet. Find the id of a Googe Sheet using googledrive::drive_find("BOEM Lease Area Table") %>% pull(id)
+
+# Project_Areas_12_3_2019_id = "17auz32s3BYk7K30gT45yUCTQ_hnp_s0i" # Google ID of zip of area shapefiles
+
+```
+
+```{r LOAD_EXISTING_GIS_DATA, eval=T}
+
+##############################################
+## SECTION 4 - LOAD EXISTING GIS DATA
+#################################################
+
+
+# STATISTICAL AREAS
+my_basemap1 = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data","corrected_stat_areas"), layer="Statistical_Areas", verbose=F)
+my_basemap1 = spTransform(my_basemap1, CRS=PROJ.USE)# Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# Establish "the other"lat lon" projection info
+PROJ.LATLON = crs(my_basemap1)
+
+#THIRTY MINUTE SQUARES
+basemap_30min = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "Thirty_Minute_Squares"), layer="Thirty_Minute_Squares", verbose=F)
+basemap_30min = spTransform(basemap_30min, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# EastCoast_states
+basemap_eastcoast = readOGR(dsn=file.path(ML.GIS.PATH,"basic spatial data","more_states"), layer="EastCoast_states", verbose=F)
+basemap_eastcoast = spTransform(basemap_eastcoast, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# EEZ Shapefiles
+basemap_EEZ = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "corrected_stat_areas"), layer="EEZ", verbose=F)
+basemap_EEZ = spTransform(basemap_EEZ, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# Herring Management areas
+basemap_herringHMA = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures", "garfo gis", "Herring_Management_Areas"), layer="Herring_Management_Areas_mod", verbose=F)
+basemap_herringHMA = spTransform(basemap_herringHMA, CRS=PROJ.USE)
+
+
+#Multispecies Closed Areas CAI, CAII, NLS)
+CAI_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_ca1", verbose=F)
+CAI_grnd = spTransform(CAI_grnd, CRS=PROJ.USE)
+CAI_grnd = CAI_grnd[CAI_grnd$id==2,]
+
+CAII_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_ca2", verbose=F)
+CAII_grnd = spTransform(CAII_grnd, CRS=PROJ.USE)
+
+NLS_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_nls", verbose=F)
+NLS_grnd = spTransform(NLS_grnd, CRS=PROJ.USE)
+
+Closedgf_04_15 = gUnion(CAI_grnd[CAI_grnd$id==2,],CAII_grnd)
+Closedgf_04_15 = gUnion(Closedgf_04_15,NLS_grnd)
+
+
+
+```
+
+
+
+```{r get_area_overlays, eval = T} 
+# Take the overlap files in this code chunk using either an Oracle table or set the filepath to the folder where the .Rdata overlap files are  
+
+###############################################
+###### Set the variables below as needed ######
+###############################################
+
+# --------------------------------------  Comment out wind_area_name when runing create_reports() -------------------------------------- #
+
+# wind_area_name = "OCS-A 0521 Remainder" # used to describe elements in dynamic text and pull wind area name from Oracle - comment out to run multiple reports from create_reports_for_all_areas.R script
+
+# The overlap_data_path is where effert data (dataset with muliplier column) from the last step (the getCallAreaEffort function) is stored - this folder will be used to combine all .rdata files of area effort together - regex will find year range and area names
+
+overlap_data_source = "folder"
+# overlap_data_source = "oracle" 
+
+oracle_overlap_table = "APSD.ALL_WEA_2008_2019@garfo_nefsc.world" #Oracle table to pull overlay files from
+
+overlap_data_path = file.path(network_location, "home5", "dcorvi", "geret_data_request", "HerringFW7_output_CW") # the file path of the folder where the overlap files are
+
+ 
+# shapefile_path = file.path(network_location,"home5/dcorvi/geret_data_request/HerringFW7")
+shapefile_path = "" # file path where a shapefile is to use for the map on the report
+shapefile_path = file.path(project_root_path,"input_data/Herring/Framework7")
+
+specific_wind_area = FALSE # this is for querying a specific wind area from a folder of multiple wind areas (for automating multiple reports)
+
+run_nybight_test = FALSE # Pull overlays from NY Bight package data to test formatting
+# --------------------------------------------------------------------------------------------------------------------------------------- #
+
+
+# Set Oracle login credentials
+#oracle_username = "bgaluardi"
+#oracle_password = "password"
+#oracle_server = "fso"
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------- #
+# Query lease table from Google Drive?
+query_google_drive_lease_table = FALSE
+
+Gsheet_BOEM_lease_area_table_id = "14MdREhJYjORPkb57n6NYEBSEVxeW3_Studsp0dB8KWc" # this is the id of the google sheet. Find the id of a Googe Sheet using googledrive::drive_find("BOEM Lease Area Table") %>% pull(id)
+
+
+
+Project_Areas_12_3_2019_id = "17auz32s3BYk7K30gT45yUCTQ_hnp_s0i" # Google ID of zip of area shapefiles
+
+if (query_google_drive_lease_table) {
+  formatted_lease_area_table <- read_sheet(Gsheet_BOEM_lease_area_table_id, sheet = "WEA_State_proj_area") %>% drop_na(`proj_area_file_name`) # remove columns without an equivelent name to reduce data readout issues i.e. pulling Lease names with extra NA vectors
+} else {
+  formatted_lease_area_table <- offshoreWind::formatted_lease_area_table # or else use the static table in the package
+}
+
+# --------------------------------------------------------------------------------------------------------------------------------------- #
+# Adding on extra years - for adding an overlay of a particular lease area for any new year(s) outside of 2008-2018 - will use regex to figure out years in folder 
+append_year = FALSE
+additonal_year_overlap_data_path = paste0(network_location, "home5/dcorvi/All_Lease_Areas_2019_output") # path to folder of overlays for this lease area with any extra years
+
+# Find the file path to the data-raw folder in the package and return error if it cant find it
+raw_data_path = file.path(offshoreWindpath,"data-raw")
+
+area_adjective = "" # The adjective that can be assigned before the word 'area' in the dynamic text - default is blank (e.g. "..most revenue from the areas over the five year analysis.." )
+# area_adjective = "call"
+
+base_year = 2019 # base year for GDP deflator - Maximum = 2020, Minimum = 1947  - max(GDPDEF_quarterly$Year)
+base_quarter = "" # base quarter for GDP deflator e.g. "Q1", "Q2" etc. Maximum = Q1 of 2020, Minimum = Q1 of 1947 - leave blank to query by year
+# base_year <- readline(prompt=paste0("What is the base year for adjusting nominal values to real values? \n\n")) #  *** vignettes dont seem to have the ability to prompt the user
+
+# vtr or dmis data source
+noaa_data_source = "dmis" # dmis data with clam data join - from 04-06-2020 DMIS table
+# noaa_data_source = "vtr" # VTR data used in Gerets original script
+# noaa_data_source = "rec" # VTR recreational data
+
+# querying from Oracle for VTR or DMIS data local variables
+dmis_table = "APSD.dmis_sfclam_040620@GARFO_NEFSC.WORLD"
+query_dmis_table = FALSE # query old or new dmis table from Oracle? True = yes, False = use flatfile in data/
+query_rec_table = FALSE # query rec table from Oracle? True = yes, False = use flatfile in data/
+query_permits = FALSE # query permit ids for vtr from Oracle? True = yes, False = use flatfile in data/
+query_gearids = FALSE # query gearids for dmis from Oracle? True = yes, False = use flatfile in data/
+
+top_fmp_section = TRUE
+other_fmp_section = TRUE
+top_species_section = TRUE
+select_species_section = FALSE
+select_gear_section = TRUE
+fishery_dependence_section = TRUE
+
+select_gear_custom =TRUE
+
+trip_and_vessel_section = FALSE
+
+single_area_summaries = FALSE # force summary tables even if theres only one area
+number_of_top_species = 10 # number of top species for top species section
+
+selectSpecies <- c("BUTTERFISH", "SUMMER FLOUNDER", "INSHORE LONGFIN SQUID", "AMERICAN LOBSTER", "ATLANTIC MACKEREL", "OCEAN QUAHOG", "SCUP", "BLACK SEA BASS", "ILLEX SQUID") # Species in select species section
+
+# sort(unique(SPECIES$SPPNM)) # List of species names
+
+##############################
+#### Set Output Variables ####
+##############################
+
+save_files = "b" # either c("r","c","b","n") r = Save RData files, c = save csv files, b = save both, n = dont save any files
+
+project_name = "TEST"  # description text that precedes the output file names
+
+output_folder_name = file.path(project_root_path,"raw_data/Herring/Framework7")
+# used for naming the folder where files will be saved
+
+# Plot colors
+assignedColors <- TRUE # assign unique colors for each margin in plots
+
+paletteName1 <- "Accent" # which color palette to use for plots - check all available pallets with display.brewer.all()
+
+paletteName2 <- "Set3" # which color palette to use for plots - check all available pallets with display.brewer.all()
+
+paletteName3 <- "Paired" # which color palette to use for plots - check all available pallets with display.brewer.all()
+
+# uncomment below to preview the different colors available for plots
+# brewer.pal.info # get dataframe of pallettes info
+# rownames(brewer.pal.info)
+# display.brewer.all() # show list of all palettes
+# display.brewer.all(colorblindFriendly = TRUE) # show list of all color blind freindly palettes
+# paste0(rownames(brewer.pal.info), collapse ="\', \'") # get vector of all color palettes
+# paletteNames <- c("Paired", "YlOrBr", "Set3", "Set2", "Set1") # must useful color palettes
+
+##############################
+#### Output Variables end ####
+##############################
+
+####################################
+#### Change the variables above ####
+####################################
+
+################################################################################################################################################################
+################################################################################################################################################################
+# Processing inputs...
+# No need to change anything else below
+
+# oracle_server=params$oracle_server # for using with markdown function params
+# oracle_username=params$oracle_username
+# oracle_password=params$oracle_password
+
+# CONN <- odbcConnect(dsn=params$oracle_server, uid=params$oracle_username, pwd=params$oracle_password, believeNRows=FALSE)
+
+# Create Oracle connection if querying from Oracle database
+if (overlap_data_source == "oracle" | query_dmis_table == TRUE | query_rec_table == TRUE | query_permits == TRUE | query_gearids == TRUE) {
+  CONN <- odbcConnect(dsn=oracle_server, uid=oracle_username, pwd=oracle_password, believeNRows=FALSE)
+}
+
+# get environmental variable of the ~  - *not used
+tilde_path = unname(unclass(Sys.getenv()["R_USER"]))
+
+# get user name - *not used anymore
+user_name = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub('\\.', ' ', unname(Sys.info()["user"]))), perl=TRUE)
+
+# create not in function
+"%notin%" = function(x,y) (x[!x%in%y])
+
+# create output folder folder outside current environment to place csv and rdata outputs
+message("creating output folder: offshorew_package_output ..")
+dir.create(output_folder_name, showWarnings = FALSE) # set path to outside package if building vignette
+output_f = output_folder_name
+
+raw_data_path = file.path(offshoreWindpath,"data-raw")
+
+# set maximum color number generated by palette name
+maxUniqueColors <- brewer.pal.info[paletteName1, "maxcolors"]
+
+# compile area data from output folder of previous step
+# pull in data from previous step (step5 - parallel processing)
+
+#--------------------------------------------------------------------------#
+# Pull overlays from NY Bight package data to test formgatting
+if (run_nybight_test == TRUE  ) {
+  wind_area_name = "NY Bight"
+  inside_areas_combined <- offshoreWind::NYBIGHT_inside_areas_c
+  MGAREA <- unique(inside_areas_combined$Area)
+  proj_area_name = "NY Bight"
+} else {
+#--------------------------------------------------------------------------#
+
+#--------------------------------------------------------------------------#
+# Pull overlay data from Oracle
+
+# if (exists("oracle_overlap_table")) {
+if (overlap_data_source == "oracle") {
+  
+  # CONN <- RODBC::odbcConnect(dsn=oracle_server, uid=oracle_username, pwd=oracle_password, believeNRows=FALSE)
+  # sqlQuery(CONN, paste0("select distinct(AREA) FROM apsd.all_wea_2011_2018@garfo_nefsc.world;"))
+  
+  ptm.areaQuery = Sys.time()
+  # inside_areas_combined <- sqlQuery(CONN, paste0("select * FROM apsd.all_wea_2011_2018@garfo_nefsc.world WHERE AREA = '", wind_area_name, 
+  #                                                "' AND YEAR >= ",min_year," AND YEAR <= ", max_year,";"))
+  
+  wind_area_name_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("-","_", wind_area_name)), perl=TRUE)
+  
+  if (length(wind_area_name) > 1) { # pull multiple areas if wind_area_name contains more than 1 vector  
+    sql_part_1 <- str_c("SELECT * FROM ", oracle_overlap_table, " WHERE AREA = '", wind_area_name[1])
+    sql_part_2 <- str_c(" AND AREA = '", wind_area_name[-1], collapse="")
+    query_string <- str_c(sql_part_1, sql_part_2, "';", collapse="")
+    inside_areas_combined <- sqlQuery(CONN, query_string)
+  } else {
+      inside_areas_combined <- sqlQuery(CONN, str_c("select * FROM ", oracle_overlap_table, " WHERE AREA = '", wind_area_name,"';"))
+    }
+  
+  message(paste0("Run time for areas query: ", as.double(round(difftime(Sys.time(), ptm.areaQuery, units='secs'), 2))%/%60," minute(s) ",as.double(round(difftime(Sys.time(), ptm.areaQuery, units='secs'), 2))%%60," second(s)"))
+  
+  inside_areas_combined <- inside_areas_combined %>%
+    dplyr::select(c("IDNUM", "AREA", "YEAR", "INSIDE")) %>% 
+    dplyr::rename("Area" = AREA, "Year" = YEAR, "Inside" = INSIDE) %>% 
+    mutate("Area" = as.character(Area)) %>%
+    mutate("Area" = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", Area), perl=TRUE)) %>% 
+    mutate("Area" = gsub("/","-", Area)) 
+  
+  if (append_year == TRUE) {
+    
+    if (any(list.files(additonal_year_overlap_data_path, pattern = paste0(wind_area_name_underscore, ".*\\.RData$")) %>% str_replace(paste0("(.+)_(","\\d{4})", "(.RData)"), "\\1") %in% wind_area_name_underscore) == FALSE) {
+      stop("The ", wind_area_name, " wind area does not exist in extra years folder..")
+    }
+    
+    all_years <- list.files(additonal_year_overlap_data_path, pattern = paste0(wind_area_name_underscore, ".*\\.RData$")) %>% str_replace(paste0("(.+)_(","\\d{4})", "(.RData)"), "\\2")
+      for (extra_year in all_years) {
+        load(paste0(additonal_year_overlap_data_path, "/", wind_area_name_underscore, "_", extra_year, ".RData", sep = '')) # load extra year as ACTIVITY
+        YEAR.AREA <- subset(ACTIVITY, select=c(IDNUM,Area,Year,Inside)) %>% 
+          mutate("Area" = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", Area), perl=TRUE))
+        YEAR.AREA <- YEAR.AREA[which(YEAR.AREA$Inside!=0),]
+        YEAR.AREA$Inside <- as.numeric(as.character(YEAR.AREA$Inside))
+        inside_areas_combined <- rbind(inside_areas_combined, YEAR.AREA)
+        rm(ACTIVITY,YEAR.AREA) # garbage collection
+      }
+  }
+  
+  odbcClose(CONN)
+  
+  #### detect names of areas from combined areas file - double check
+  MGAREA <- unique(inside_areas_combined$Area)
+  
+  #### Update wind area names
+  # ----- I placed the line below in the load libraries chunk because it prompts the user to sign into Google in the middle of the chunk run -----#
+  # formatted_lease_area_table <- read_sheet(Gsheet_BOEM_lease_area_table_id, sheet = "WEA_State_proj_area") %>% drop_na(`proj_area_file_name`) # remove columns without an equivelent name to reduce data readout issues i.e. pulling Lease names with extra NA vectors  
+  
+  if (wind_area_name %in% formatted_lease_area_table$proj_area_file_name) {
+    proj_area_name <- wind_area_name
+    # wind_area_name <- proj_area_file_name
+    wind_area_name <- formatted_lease_area_table %>% 
+      filter(proj_area_file_name==wind_area_name) %>% 
+      pull(`Lease Name`) # get the reformatted wind area name using the mapped project area file name
+    inside_areas_combined <- inside_areas_combined %>%
+      mutate("Area" = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", wind_area_name), perl=TRUE)) %>%
+      mutate("Area" = gsub("/","-", Area))
+    }
+  #### end Update wind area names
+  # inside_areas_combined <- inside_areas_combined %>% filter( Year < 2019 & Year >= 2014 ) # set for testing
+  # sort(unique(inside_areas_combined$Year))
+  # sort(unique(inside_areas_combined %>% filter( Year < 2019 & Year >= 2014 ) %>% select(Year)) %>% pull())
+
+} # end conditional for checking for overlaps Oracle table
+#--------------------------------------------------------------------------#
+
+
+#--------------------------------------------------------------------------#
+# Pull overlays from Folder
+# if (exists("overlap_data_path")) {
+if (overlap_data_source == "folder") {
+  
+###### get info to be able to loop over overlap file ######
+# get areas from overlap_data_path 
+MGAREA <- unique(gsub(pattern="(.+)_([0-9]{4})(.RData$)","\\1", ignore.case = TRUE , list.files(path=overlap_data_path, pattern = "(.+)(.RData$)", ignore.case =TRUE, recursive=F, full.names=F)))
+
+years <- unique(gsub(pattern="(.+)_([0-9]{4})(.RData$)","\\2", ignore.case = TRUE , list.files(path=overlap_data_path, pattern = "(.+)(.RData$)", ignore.case =TRUE, recursive=F, full.names=F))) # get years from overlap_data_path
+
+START.YEAR <- min(years)
+END.YEAR <- max(years)
+rm(years)
+
+if (any(gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", MGAREA), perl=TRUE) %in% formatted_lease_area_table$proj_area_file_name)) {
+  
+  if (specific_wind_area) {
+  MGAREA <- MGAREA[MGAREA %in% gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("-","_", wind_area_name)), perl=TRUE)]
+  years <- unique(gsub(pattern="(.+)_([0-9]{4})(.RData$)","\\2", ignore.case = TRUE, list.files(path=overlap_data_path, pattern = paste0(MGAREA, "_([0-9]{4})(.RData$)"), ignore.case =TRUE, recursive=F, full.names=F))) # get years from overlap_data_path
+  START.YEAR <- min(years)
+  END.YEAR <- max(years)
+  rm(years)
+}
+  
+  proj_area_name = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", gsub("OCS_A","OCS-A", MGAREA)), perl=TRUE)
+  
+  wind_area_name <- formatted_lease_area_table %>% # set wind area name as proper lease name
+  filter(proj_area_file_name==proj_area_name) %>% 
+  pull(`Lease Name`)
+  
+} else {
+  proj_area_name <- wind_area_hard_name 
+  wind_area_name <- wind_area_hard_name
+}
+
+# MGAREA <- gsub(pattern=".shp$","", ignore.case = TRUE ,
+#      list.files(path=shapefile_f,ignore.case =TRUE, pattern="shp$", recursive=F, full.names=F))
+# need to move this to getCallAreaEffort function
+# MGAREA <- gsub(pattern=" ","_", gsub(pattern="-","_", MGAREA))
+
+# get static file all inside trip area data that was created in overlap file 
+test=1
+for (YEAR in START.YEAR:END.YEAR) {
+  for (AREA in MGAREA){
+    load(paste0(overlap_data_path, "/",AREA,"_",YEAR,".RData", sep = ''))
+    if (test == 1) {
+      inside_areas_combined <- subset(ACTIVITY, select=c(IDNUM,Area,Year,Inside))
+      inside_areas_combined$Inside <- as.numeric(as.character(inside_areas_combined$Inside))
+      inside_areas_combined <- inside_areas_combined[which(inside_areas_combined$Inside!=0),]
+      inside_areas_combined$Inside <- as.numeric(as.character(inside_areas_combined$Inside))
+      rm(ACTIVITY) # garbage collection
+      test = 2
+    }
+    else {
+      YEAR.AREA <- subset(ACTIVITY, select=c(IDNUM,Area,Year,Inside))
+      YEAR.AREA <- YEAR.AREA[which(YEAR.AREA$Inside!=0),]
+      YEAR.AREA$Inside <- as.numeric(as.character(YEAR.AREA$Inside))
+      inside_areas_combined <- rbind(inside_areas_combined, YEAR.AREA)
+      rm(ACTIVITY,YEAR.AREA) # garbage collection
+    }
+  }
+} # end for loop for getting overlap data from folder
+  #### Update wind area names
+  if (specific_wind_area) {
+inside_areas_combined <- inside_areas_combined %>%
+      mutate("Area" = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", wind_area_name), perl=TRUE)) %>%
+      mutate("Area" = gsub("/","-", Area))
+} else {
+    inside_areas_combined <- inside_areas_combined %>%
+       # make spaces underscores and
+      # mutate("Area" = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", Area)), perl=TRUE))
+      mutate("Area" = gsub("/","-", gsub(" ","_", gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", Area), perl=TRUE))))
+}
+} # end conditional for checking for overlaps folder
+} # end conditional for testing for running NY Bight test run 
+#--------------------------------------------------------------------------#
+
+#### detect Start and end years from combined areas file
+START.YEAR = as.integer(min(inside_areas_combined$Year))
+END.YEAR = as.integer(max(inside_areas_combined$Year))
+
+numyear <- offshoreWind::proper(offshoreWind::numbers2words(as.integer(length(START.YEAR:END.YEAR))))
+
+# set global variables to lowercase for better compatibility
+noaa_data_source <- tolower(noaa_data_source)
+save_files = tolower(save_files)
+
+message(ifelse(save_files == "b", "Saving .csv and .rdata files..", ifelse(save_files == "c", "Saving .csv files..", 
+       ifelse(save_files == "r", "Saving .rdata files..", ifelse(save_files == "n", "Not saving any table files..","No save method specified")))))
+
+message("Creating PDF using demonstration data of ", paste0(MGAREA, collapse = ", ")," areas..", appendLF = TRUE)
+message("Using ", toupper(noaa_data_source), " data..", appendLF = TRUE)
+
+deflate_by <- if_else(base_quarter == "" , "year", "quarter") # set whether to deflate revenue by quarter or year - default is quarter - this is done in the adjust_nominal_values_to_real_values code chunk
+
+# Add space after area adjective if it is used and if there isnt a space in there already
+area_adjective <- ifelse(area_adjective!= "" && str_sub(area_adjective,-1,-1) != " " , paste0(area_adjective," "), area_adjective)
+
+# check what article the adjective needs - "an" if no adjective or if the adjective begin with an 'a' 
+a_or_an <- ifelse(area_adjective == "" || tolower(substr(area_adjective, start = 1, stop = 1)) == "a", " an ", " a ")
+
+# Mistype Error Checking:
+if ((base_year %in% 1947:2020 == FALSE)) {stop("Base year not between 2020 and 1947 or not given..")}
+if ((base_quarter %in%  c("Q1", "Q2", "Q3", "Q4", "") == FALSE)) {stop("Base Quarter not written as Q1, Q2, Q3, Q4..")}
+if (deflate_by == "year") {message("Deflating by ", base_year, " dollars..")}
+if (deflate_by == "quarter") {message("Deflating by ", base_year, ", ", base_quarter, " dollars..")}
+
+# Setup more helpful error messages
+if (rlang::is_empty(MGAREA)) {stop("Didn't, detect any areas. Check that the overlay data is in the ",overlap_data_path," folder.")}
+
+# more helpul connection errors
+if (overlap_data_source == "oracle" | query_dmis_table == TRUE | query_rec_table == TRUE | query_permits == TRUE | query_gearids == TRUE) {
+  if (CONN==-1) {stop("Not connected to VPN") # conn equals -1 if not connected to vpn
+  }
+}
+if (overlap_data_source == "folder") {
+  if (!dir.exists(additonal_year_overlap_data_path) | !dir.exists(overlap_data_path)) {
+  stop("Not connected to shared drive or overlap_data_path or additonal_year_overlap_data_path folder doesn't exist") # checks that the overlap path exists to see if the user has entered the password for the shared drive
+  }
+}
+
+rounded_message <- "All numbers have been rounded to the nearest thousand."
+
+number_of_areas <- length(MGAREA)
+# set code chunks to evaluate
+eval_create_connection = query_dmis_table | query_permits | query_gearids 
+eval_query_DMIS_or_REC = query_dmis_table | query_rec_table 
+eval_query_gearids_permits = query_gearids | query_permits 
+
+summary_tables = number_of_areas > 1 # create summary tables if more than 1 area - can change to false to force summaries of single areas
+
+summary_tables <- if_else(single_area_summaries, TRUE, summary_tables) # create summary tables if forced
+
+top_fmp_section_summary = top_fmp_section & summary_tables
+other_fmp_section_summary = other_fmp_section & summary_tables
+top_species_section_summary = top_species_section & summary_tables
+select_species_section_summary = select_species_section & summary_tables
+select_gear_section_summary = select_gear_section & summary_tables
+
+
+
+# Setup section numbers
+section_num = 0
+
+message("Running lease area(s): ", paste0(wind_area_name, collapse = ", "), ", Project Area(s): ", paste0(proj_area_name, collapse = ", ")," ..")
+
+ptm.SCRIPT = Sys.time() #bench marking
+
+# inside_areas_combined_empire_wind_oracle <- inside_areas_combined
+# inside_areas_combined_empire_wind_folder <- inside_areas_combined
+# offshoreWind::formatted_lease_area_table$proj_area_file_name
+
+# MGAREA
+
+
+```
+
+
+```{r create_connection_if_querying, eval = eval_create_connection}  
+# this should stop errors from occuring in the case that Oracle credentials are not changed from defaults 
+    if (.Platform$OS.type == "windows") { # if os is windows use RODBC
+  
+  CONN <- RODBC::odbcConnect(dsn=oracle_server, uid=oracle_username, pwd=oracle_password, believeNRows=FALSE)
+# CONN <- odbcConnect(dsn= "sole", uid=rstudioapi::askForPassword("Oracle user"),
+#                               pwd=rstudioapi::askForPassword("Oracle password"), believeNRows=FALSE) # use r studio api to askf for creds
+    }
+  
+  if (.Platform$OS.type == "unix") { # if os is Linux (i.e. on Venus) use ROracle
+    if(!require(ROracle)) {
+    install.packages("ROracle")
+    require(ROracle)}
+    
+    host <- "sole.nefsc.noaa.gov"
+    sid <- oracle_server
+    #host <- "nova.nefsc.noaa.gov"
+    port <- 1526
+    uid <- oracle_username
+    mypass <- oracle_password
+    drv <- dbDriver("Oracle")
+    
+    connect.string<-paste(
+     "(DESCRIPTION=",
+     "(ADDRESS=(PROTOCOL=tcp)(HOST=", host, ")(PORT=", port, "))",
+     "(CONNECT_DATA=(SID=", sid, ")))", sep="")
+    CONN <- dbConnect(drv, uid, password=mypass, dbname=connect.string)
+  }
+# Note: In order for ROracle to work the user may need to create a file named ".Renviron" and place into top directory of personal shared drive with the following sequential lines:
+# ORACLE_HOME=/ora1/app/oracle/product/11.2.0/dbhome_1
+# export ORACLE_HOME
+
+
+```
+
+```{r query_DMIS_or_REC_if_requested, eval = eval_query_DMIS_or_REC} 
+########################################
+##### Query DMIS table from Oracle #####
+########################################
+### load dmis manually from Oracle instead of from flat file to ensure data is up-to-date - may take up to 17 hours on the VPN 
+
+if (noaa_data_source == "dmis") {
+  message("Querying DMIS data from Oracle..")
+  ptm.DMISQuery = Sys.time()
+  APSD_DMIS_2 <- sqlQuery(CONN, paste0("SELECT * FROM ", dmis_table, " WHERE Year >= ",
+                                                  START.YEAR, " AND Year <= ", END.YEAR))
+  message(paste0("Run time for DMIS query: ", as.double(round(difftime(Sys.time(), ptm.DMISQuery, units='secs'), 2))%/%60," minute(s) ",as.double(round(difftime(Sys.time(), ptm.DMISQuery, units='secs'), 2))%%60," second(s)"))
+
+}
+
+########################################
+##### Query REC table from Oracle #####
+########################################
+### load rec manually from Oracle instead of from flat file to ensure data is up-to-date - may take a long time on the VPN 
+if (noaa_data_source == "rec") {
+  ptm.RECQ = Sys.time()
+  # get vtr data for recreational
+for(i in START.YEAR:END.YEAR) {
+  print(i)
+  CURRENT.QUERY = paste("SELECT VTR.veslog",i,"s.TRIPID,
+        				VTR.veslog",i,"t.DATESAIL,
+                (to_date(VTR.veslog",i,"t.DATELND1)-to_date(VTR.veslog",i,"t.DATESAIL))+1 as DAS,
+        				VTR.veslog",i,"t.TRIPCATG,
+        				VTR.veslog",i,"t.PORTLND1,
+        				VTR.veslog",i,"t.STATE1,
+        				VTR.VLPORTSYN.PORT,
+        				VTR.veslog",i,"t.HULLNUM as VESID,
+        				VTR.veslog",i,"g.GEARCODE,
+        				VTR.vlgear.GEARNM,
+        				VTR.veslog",i,"s.QTYKEPT,
+                VTR.veslog",i,"s.QTYDISC,
+        				VTR.VLSPPSYN.SPPCONV,
+                VTR.veslog",i,"s.SPPCODE,
+        				VTR.VLSPPSYN.NESPP3,
+        				VTR.veslog",i,"g.FZONE,
+                VTR.veslog",i,"g.CAREA as AREA,
+        				VTR.veslog",i,"g.CLATDEG,
+        				VTR.veslog",i,"g.CLATMIN,
+        				VTR.veslog",i,"g.CLATSEC,
+        				VTR.veslog",i,"g.CLONDEG,
+        				VTR.veslog",i,"g.CLONMIN,
+        				VTR.veslog",i,"g.CLONSEC,
+        				VTR.veslog",i,"g.SERIAL_NUM,
+                VTR.veslog",i,"g.GEARID
+        				FROM VTR.veslog",i,"s
+        				LEFT JOIN VTR.veslog",i,"g ON VTR.veslog",i,"s.GEARID = VTR.veslog",i,"g.GEARID
+        				LEFT JOIN VTR.veslog",i,"t ON VTR.veslog",i,"s.TRIPID = VTR.veslog",i,"t.TRIPID
+        				LEFT JOIN VTR.vlgear ON VTR.veslog",i,"g.GEARCODE = VTR.vlgear.GEARCODE
+        				LEFT JOIN VTR.VLSPPSYN ON VTR.veslog",i,"s.SPPCODE = VTR.VLSPPSYN.SPPSYN
+        				LEFT JOIN VTR.VLPORTSYN ON VTR.veslog",i,"t.PORTLND1 = VTR.VLPORTSYN.PORTSYN AND VTR.veslog",i,"t.STATE1 = VTR.VLPORTSYN.STATEABB
+                WHERE VTR.veslog",i,"t.TRIPCATG in(2,3)
+        				ORDER BY VTR.veslog",i,"t.DATESAIL",sep="")
+  YEAR.RESULT = sqlQuery(CONN, CURRENT.QUERY)  ### seems to be a problem with having a "paste" on both sides...
+
+  # Now, the loop compiles the results; the first year must be treated slightly differently###
+  if (i==START.YEAR) {
+    RESULT.COMPILED = YEAR.RESULT
+  } else {
+    RESULT.COMPILED = rbind(RESULT.COMPILED, YEAR.RESULT) }
+}    # End Main Loop
+
+VTR_REC <- as_tibble(RESULT.COMPILED) # dplyr::rename data to be more explicit
+
+VTR_REC <- VTR_REC %>% # fix data
+  dplyr::rename("IDNUM" = GEARID) %>%
+  mutate(YEAR = as.integer(format(DATESAIL,"%Y"))) %>% # create column for year
+  mutate(MONTH = as.integer(format(DATESAIL,"%m"))) %>% # create column for month
+  mutate("LAT" = angle2dec(paste0(VTR_REC$CLATDEG, " ", VTR_REC$CLATMIN, " ", VTR_REC$CLATSEC))) %>%
+  mutate("LON" = angle2dec(paste0(VTR_REC$CLONDEG, " ", VTR_REC$CLONMIN, " ", VTR_REC$CLONSEC))) %>%
+  mutate("PORTLANDED" = paste0(PORTLND1,", ",STATE1)) %>%
+  mutate("NESPP3" = as.integer(NESPP3)) %>%
+  mutate("LIVE" = QTYKEPT * SPPCONV) %>%
+  left_join(x = ., y = SPECIES, by = "NESPP3") %>% # join species names by NESPP3 from previously created csv file saved as flat file in data/
+  mutate("FMP" = Formatted_2) %>% # fix formatting for FMPs
+  dplyr::select(-Formatted_2) %>%
+  mutate("FMP" = if_else(FMP=="","None", FMP))
+  
+  message(paste0("Run time for recreation data query and clean: ", as.double(round(difftime(Sys.time(), ptm.RECQ, units='secs'), 2))%/%60," minute(s) ",as.double(round(difftime(Sys.time(), ptm.RECQ, units='secs'), 2))%%60," second(s)"))
+}
+
+
+```
+
+```{r query_gearids_permits_if_requested, eval = eval_query_gearids_permits}  
+ 
+  # ##### option 2 - Query from database 
+  # CONN = odbcConnect(dsn="sole",uid="dcorvi",pwd="pw",believeNRows=FALSE)
+  # query missing data from Oracle (should take about 2.5 minutes on VPN) and will join in next code block  
+  ptm.TOTAL = Sys.time()
+  E_Y <- END.YEAR+1
+  for(i in START.YEAR:E_Y) {
+    ptm.TOT = Sys.time()
+    print(i)
+    if (noaa_data_source == "vtr") { # get permit variable from Oracle
+    CURRENT.QUERY = paste("SELECT unique PERMIT,
+                          TRIPID FROM VTR.veslog",i,"t ;"
+                          , sep="") } 
+    else if (noaa_data_source == "dmis") { # get gearid variable from Oracle
+    CURRENT.QUERY = paste("SELECT SERIAL_NUM, GEARID,
+                          TRIPID FROM VTR.veslog",i,"g ;" # GEARID is equilivent to IMGID - from data dictionary: GEARID:VESLOG Gear record identifier; Primary key for VESLOGyyyyG. Equivalent to IMGID in VTR IMAGES table
+                          , sep="") # stringsAsFactors = FALSE
+    }
+    # TODO: change RESULT.COMPILED object name bc it is masked by native rstudio methods
+    YEAR.RESULT = sqlQuery(CONN, CURRENT.QUERY, stringsAsFactors=FALSE)  ### seems to be a problem with having a "paste" on both sides...
+    YEAR.RESULT$YEAR_L <- i
+    # Now, the loop compiles the results; the first year must be treated slightly differently###
+    if (i==START.YEAR) {
+      QUERY_RESULT = YEAR.RESULT
+    } else {
+      QUERY_RESULT = rbind(QUERY_RESULT,YEAR.RESULT) }
+    # Print the results summary:
+    print(paste("For year ",i,", ",(NROW(YEAR.RESULT))," records were added.",sep=""))
+    print(paste0("After adding year ",i,", total records imported = ", NROW(QUERY_RESULT),"."))
+    print(paste0("Run time ",round(difftime(Sys.time(), ptm.TOT, units='secs'), 2), " seconds for ",i))
+  }    # End Main Loop
+  QUERY_RESULT <- QUERY_RESULT %>% dplyr::rename("IDNUM" = GEARID, "TRIPID_check" = TRIPID) %>% mutate(SERIAL_NUM = as.character(SERIAL_NUM))
+  QUERY_RESULT$YEAR_L <- NULL # remove year variable
+  print(paste0("Run time ", round(difftime(Sys.time(), ptm.TOTAL, units='secs'), 2), " seconds for ",START.YEAR," to ",E_Y))
+
+  odbcClose(CONN) # garbage collection
+
+```
+
+
+```{r load_VTR_REC_or_DMIS_flat_files_and_clean, eval = T}  
+# run this code chunk to query from Oracle or use in-package data - querying from Oracle takes longer but ensures that everything is up-to-date    
+# also renames and cleans DMIS variables and data   
+ 
+#### load data for VTR and filter by years
+if (noaa_data_source == "vtr") { 
+  message("Loading flat VTR file from package..")
+  VTR_FIN <- offshoreWind::VTR_FIN # not needed but keeps code explicit 
+  message("VTR observations for all years: ", format(NROW(VTR_FIN), big.mark=",", scientific=FALSE))
+  VTR_FIN <- VTR_FIN[ which(VTR_FIN$YEAR >= START.YEAR & VTR_FIN$YEAR <= END.YEAR),] # subset by selected years
+  message(START.YEAR, " to ", END.YEAR, " VTR observations: ", format(NROW(VTR_FIN),big.mark=",",scientific=FALSE))
+}
+
+if (noaa_data_source == "rec") {
+  message("Loading flat VTR recreation file from package..")
+  VTR_REC <- offshoreWind::VTR_REC # not needed but keeps code explicit 
+  message("VTR observations for all years: ", format(NROW(VTR_REC), big.mark=",", scientific=FALSE))
+  VTR_REC <- VTR_REC[ which(VTR_REC$YEAR >= START.YEAR & VTR_REC$YEAR <= END.YEAR),] # subset by selected years
+  message(START.YEAR, " to ", END.YEAR, " VTR observations: ", format(NROW(VTR_REC),big.mark=",",scientific=FALSE))
+}
+
+##### load data for DMIS filter by years
+
+if (noaa_data_source == "dmis" && query_dmis_table == FALSE) {
+  message("Loading flat DMIS file from package..")
+  APSD_DMIS <- as_tibble(offshoreWind::APSD_DMIS_2) # load from data/ folder
+  message("DMIS observations for all years: ", format(NROW(APSD_DMIS), big.mark=",", scientific=FALSE))
+  APSD_DMIS <- APSD_DMIS[ which(APSD_DMIS$YEAR >= START.YEAR & APSD_DMIS$YEAR <= END.YEAR),] # subset by selected years
+  message(START.YEAR, " to ", END.YEAR, " DMIS observations: ", format(NROW(APSD_DMIS),big.mark=",",scientific=FALSE))
+}
+
+#### change dmis variables to vtr variables and join tables with need variables ####
+# save(APSD_DMIS, file="APSD_DMIS.rData")
+
+# write.csv(APSD_DMIS, file="APSD_DMIS.csv")
+
+# offshoreWind::VTR_FIN
+
+
+# VTR_FIN <- offshoreWind::VTR_FIN %>% # fix data
+#   # dplyr::rename("IDNUM" = GEARID) %>%
+#   mutate(FY = as.integer(format(DATESAIL,"%Y"))) %>% # create column for year
+#   mutate(MONTH = as.integer(format(DATESAIL,"%m"))) %>% # create column for month
+#   mutate("PORTLANDED" = paste0(PORTLND1,", ",STATE1)) %>%
+#   mutate("NESPP3" = as.integer(NESPP3)) %>%
+#   mutate("LIVE" = QTYKEPT * SPPCONV) %>%
+#   left_join(x = ., y = SPECIES, by = "NESPP3") %>% # join species names by NESPP3 from previously created csv file saved as flat file in data/
+#   mutate("FMP" = Formatted_2) %>% # fix formatting for FMPs
+#   dplyr::select(-Formatted_2) %>%
+#   mutate("FMP" = if_else(FMP=="","None", FMP))
+
+
+# remap dmis variables to vtr variables when dmis data source is requested
+# TODO: find-replace vtr variables to dmis variables when code is 100% functional
+# DMIS missong HULLNUM variable? HULLNUM as VESID
+# add gearids from VESLOGyyyyG Oracle table by SERIAL_NUM in next code chunk
+# sum(is.na(APSD_DMIS$DAS)) # count NA's
+
+# APSD_DMIS_2 <- offshoreWind::APSD_DMIS_2 # reset data
+# as_tibble(APSD_DMIS)
+# as_tibble(APSD_DMIS_2)
+#### DMIS dataste 2
+
+# as_tibble(APSD_DMIS)
+
+# SPECIES <- offshoreWind::SPECIES[,1:3] #change back to original FMPs without formatting
+
+# SPECIES <- offshoreWind::SPECIES %>% mutate(Formatted_2 = ifelse(NESPP3==710, "No Federal FMP", Formatted_2))
+
+# Note: cannot determine days at sea with dmis/clam data
+if (noaa_data_source == "dmis") { #new dmis table with imgids 
+  ptm.DMIS = Sys.time()
+APSD_DMIS <- as_tibble(
+  APSD_DMIS %>% 
+    # mutate(SECGEARFISH = if_else(NESPP3=="754","754", SECGEARFISH)) %>% # fix data cleaning isssue with NESPP3 code in clam data 
+    # mutate(SECGEARFISH = if_else(NESPP3=="769","769", SECGEARFISH)) %>% 
+    # mutate(SPPNAME = if_else(SPPNAME=="QUAHOGS/BUSHEL","DRC", SPPNAME)) %>% # fix data cleaning isssue with Gearcode in clam data
+    # mutate(SPPNAME = if_else(SPPNAME=="CLAM, SURF/BUSHEL","DRC", SPPNAME)) %>% 
+    # dplyr::select(-c("GEARCODE", "NESPP3")) %>% # remove columns with wrong names
+    dplyr::select(-c("GEARCODE")) %>% # remove columns with wrong names
+    # dplyr::rename("IDNUM"=IMGID, "PORTLND1"=VTR_PORT, "STATE1"=VTR_STATE, "DATESAIL"=DATE_TRIP, "NESPP3"=SECGEARFISH,
+    #        "GEARCODE"=SPPNAME, "REVENUE"=DOLLAR, "QTYKEPT"=LANDED, "LAT"=DDLAT, "LON"=DDLON) %>%
+    # dplyr::rename("IDNUM"=IMGID, "PORTLND1"=VTR_PORT, "STATE1"=VTR_STATE, "DATESAIL"=DATE_TRIP, "GEARCODE"=SECGEARFISH,
+    #        "SPPNM"=SPPNAME, "REVENUE"=DOLLAR, "LIVE"=POUNDS, "QTYKEPT"=LANDED, "LAT"=DDLAT, "LON"=DDLON) %>% 
+    # dplyr::rename("IDNUM"=IMGID, "PORTLND1"=VTR_PORT, "STATE1"=VTR_STATE, "DATESAIL"=DATE_TRIP, "GEARCODE"=SECGEARFISH,
+    #        "SPPNM"=SPPNAME, "REVENUE"=DOLLAR, "LIVE"=POUNDS, "QTYKEPT"=LANDED, "LAT"=DDLAT, "LON"=DDLON, "DAS"=TRIP_LENGTH) %>% 
+    dplyr::rename("IDNUM"=IMGID, "PORTLND1"=VTR_PORT, "STATE1"=VTR_STATE, "DATESAIL"=DATE_TRIP, "GEARCODE"=SECGEARFISH, 
+           "REVENUE"=DOLLAR, "LIVE"=POUNDS, "QTYKEPT"=LANDED, "LAT"=DDLAT, "LON"=DDLON, "DAS"=TRIP_LENGTH) %>% 
+    mutate("MONTH" = as.integer(format(DATESAIL,"%m"))) %>% # create column for month 
+    mutate("PORTLANDED" = paste0(PORTLND1,", ",STATE1)) %>% 
+    mutate("NESPP3" = as.integer(NESPP3)) %>% 
+    left_join(x = ., y = SPECIES, by = "NESPP3") %>% # join species names by NESPP3 from previously created csv file saved as flat file in data/ 
+    mutate("FMP" = Formatted_2) %>% # fix formatting for FMPs 
+    dplyr::select(-Formatted_2) %>% 
+    mutate("FMP" = if_else(FMP=="","None", FMP)) %>% #rename blank FMPs 
+    # dplyr::rename("SPPNM"=SPPNM.y, "SPPNM_s"=SPPNM.x) %>%
+    # mutate("FMP" = if_else(is.na(FMP),"Missing Species Code Mapping", FMP)) %>% # fix missing data for species codes, FMPs and code to species mapping
+    mutate("FMP" = if_else(is.na(FMP),"All Others", FMP)) %>% # fix missing data for species codes, FMPs and code to species mapping
+    # mutate("SPPNAME" = if_else(is.na(SPPNAME) & is.na(NESPP3), "Missing Species Code", SPPNAME)) %>% 
+    # mutate("SPPNAME" = if_else(is.na(SPPNAME), "Species Name Is Null", SPPNAME)) %>% 
+    mutate("SPPNM" = if_else(is.na(SPPNM) & is.na(NESPP3), "UNKNOWN", SPPNM)) %>%
+    left_join(x = ., y = subset(offshoreWind::VLGEARTABLE, select=c(GEARCODE, GEARNM)), by = "GEARCODE") #add gearnames from VLGEAR table (saved as flat file from Oracle)
+  ) 
+  message(paste0("Run time for variable replacement and joins in DMIS table: ", as.double(round(difftime(Sys.time(), ptm.DMIS, units='secs'), 2))%/%60," minute(s) ",as.double(round(difftime(Sys.time(), ptm.DMIS, units='secs'), 2))%%60," second(s)"))
+}
+
+# sort(unique(APSD_DMIS %>% filter(is.na(FMP)) %>% pull(NESPP3))) %notin% SPECIES$NESPP3
+  
+
+# sapply(APSD_DMIS_2, function(x) sum(is.na(x))) # check NAs
+# sapply(APSD_DMIS, function(x) comma_format()(sum(is.na(x)))) # check NAs
+# 
+# comma_format()(nrow(APSD_DMIS_2))
+# comma_format()(nrow(APSD_DMIS))
+# colnames(APSD_DMIS_2)
+
+# rm(APSD_DMIS)
+# library(readr)
+# write_csv(tibble::enframe((unique(APSD_DMIS_2$SPPNAME)),name = NULL), "speciescheck.csv")
+
+#### Get finished flat files of gears and species joined VTR REC or DMIS data ####
+if (noaa_data_source == "vtr") {
+  FIN <- VTR_FIN
+} else if (noaa_data_source == "rec" ) {
+  FIN <- VTR_REC
+} else if (noaa_data_source == "dmis" ) {
+  FIN <- APSD_DMIS
+} else {
+  stop("please enter data source..")
+}
+
+#### save raw data of years requested
+# if (save_files == "r" | save_files == "b" ) {
+#   message("saving raw data..")
+#   save(FIN, file=file.path(output_f, paste(project_name, "_RAW.Rdata",sep="")))
+# }
+
+#### if not querying from Oracle, get flat files and filter by the years requested 
+if (query_gearids == FALSE | query_permits == FALSE) {
+  if (noaa_data_source == "vtr" || noaa_data_source == "rec" ) {
+    QUERY_RESULT <- offshoreWind::PERMIT_QUERY
+  } else if (noaa_data_source == "dmis") {
+    QUERY_RESULT <- offshoreWind::GEARID_QUERY
+    # QUERY_RESULT <- QUERY_RESULT %>% rename("IDNUM" = GEARID, "TRIPID_check" = TRIPID) %>% mutate(SERIAL_NUM = as.character(SERIAL_NUM)) 
+    QUERY_RESULT <- QUERY_RESULT %>% dplyr::rename("IDNUM" = GEARID) %>% mutate(SERIAL_NUM = as.character(SERIAL_NUM)) 
+    QUERY_RESULT <- QUERY_RESULT[ which(QUERY_RESULT$YEAR_L >= START.YEAR & QUERY_RESULT$YEAR_L <= END.YEAR+1),]
+  }
+}
+
+# unique(select_gear_codes  %>% filter(gearcat_new=="[blank]") %>% select(GEARCODE))
+
+FIN_backup <- FIN
+
+
+```
+
+```{r process_permit_data, eval = T} 
+# FIN <- FIN_backup # for resets
+
+QUERY_RESULT$YEAR_L <- NULL # remove year variable
+
+FIN$GEARCAT <- ""
+FIN$GEARCAT[FIN$GEARNM=="POT, LOBSTER"] <- "Lobster Pot"
+FIN$GEARCAT[FIN$GEARNM %in% c("OTTER TRAWL, BOTTOM,FISH","OTTER TRAWL, BEAM","OTTER TRAWL, BOTTOM,OTHER", "OTTER TRAWL,BOTTOM,TWIN",
+                                  "SEINE, DANISH","SEINE, SCOTTISH","PAIR TRAWL, BOTTOM") ] <- "Bottom Trawl"
+FIN$GEARCAT[FIN$GEARNM=="GILL NET, SINK"] <- "Sink Gillnet"
+FIN$GEARCAT[FIN$GEARNM %in% c("DREDGE, SCALLOP,SEA","DREDGE, SCALLOP-CHAIN MAT","DREDGE,SCALLOP,TURTLE DEFLECT",
+                                  "DREDGE, SCALLOP,CHAIN MAT,MOD","OTTER TRAWL, BOTTOM,SCALLOP")] <- "Scallop Gear"
+FIN$GEARCAT[FIN$GEARNM=="DREDGE, OCEAN QUAHOG/SURF CLAM"] <- "Clam Dredge"
+FIN$GEARCAT[FIN$GEARNM=="OTTER TRAWL, BOTTOM,SHRIMP"] <- "Shrimp Trawl"
+FIN$GEARCAT[FIN$GEARNM %in% c("DREDGE, URCHIN","DREDGE, OTHER")] <- "Other Dredge"
+FIN$GEARCAT[FIN$GEARNM %in% c("DREDGE, MUSSEL")] <- "Mussel Dredge"
+FIN$GEARCAT[FIN$GEARNM %in% c("HAND LINE/ROD & REEL","HARPOON")] <- "Hand Gear"
+FIN$GEARCAT[FIN$GEARNM=="LONGLINE, BOTTOM"] <- "Bottom Longline"
+FIN$GEARCAT[FIN$GEARNM %in% c("POT, HAG","POT, CRAB","POT, FISH", "POT, CONCH/WHELK", "POT, SHRIMP","POT, OTHER",
+                                  "TRAP","POT, EEL","POTS, MIXED")] <- "Other Pot"
+FIN$GEARCAT[FIN$GEARNM %in% c("OTTER TRAWL, MIDWATER","PAIR TRAWL, MIDWATER")] <- "Midwater Trawl"
+FIN$GEARCAT[FIN$GEARNM %in% c("OTTER TRAWL, HADDOCK SEPARATOR","OTTER TRAWL, RUHLE")] <- "Separator & Ruhle Trawl"
+FIN$GEARCAT[FIN$GEARNM %in% c("GILL NET, DRIFT,LARGE MESH","GILL NET, DRIFT,SMALL MESH")] <- "Drift Gillnet"
+FIN$GEARCAT[FIN$GEARNM %in% c("FYKE NET","OTHER GEAR", "HAND RAKE", "DIVING GEAR","SEINE, STOP","WEIR","CARRIER VESSEL",
+                                  "MIXED GEAR","CASTNET","SEINE,HAUL")] <- "Other Gear"
+FIN$GEARCAT[FIN$GEARNM=="LONGLINE, PELAGIC"] <- "Pelagic Longline"
+FIN$GEARCAT[FIN$GEARNM=="SEINE, PURSE"] <- "Purse Seine"
+FIN$GEARCAT[FIN$GEARNM %in% c("GILL NET, OTHER","GILL NET, RUNAROUND")] <- "Other Gillnet"
+FIN$GEARCAT[FIN$GEARCAT==""] <- "Other Gear"
+FIN$GEARCAT[which(is.na(FIN$GEARCAT))] <- "Other Gear"
+
+if (noaa_data_source == "vtr"|| noaa_data_source == "rec") {
+QUERY_RESULT <- unique(QUERY_RESULT)
+TEST_1 <- NROW(FIN)
+message("Merging data from step 2 with permit data by TRIPID..")
+ptm.TOTAL = Sys.time()
+#### merge PERMIT using TRIPID if vtr or rec
+FIN <- merge(FIN, QUERY_RESULT, by='TRIPID', all.x = TRUE, all.y = FALSE)
+if (NROW(FIN) != TEST_1) stop("Merging Permits increased number of rows, which shouldn't happen")
+message(paste0("Run time ", round(difftime(Sys.time(), ptm.TOTAL, units='secs'), 2), " seconds for merge"))
+}
+
+if (noaa_data_source == "vtr") {
+FIN <- subset(FIN, select=c('PORTLANDED','YEAR','VESID','NESPP3','MONTH','GEARCODE','GEARCAT','SERIAL_NUM','IDNUM','LIVE',
+                            'QTYKEPT','QTYDISC','DAS','SPPNM','REVENUE','FMP','LEN','FY','TRIPID','PERMIT','LAT','LON',"STATE1"))
+} 
+
+if (noaa_data_source == "rec") {
+FIN <- subset(FIN, select=c('TRIPID', 'IDNUM', 'YEAR', 'MONTH', 'DAS', 'SPPNM', 'FMP', 'NANGLERS', 'LIVE', 'QTYKEPT','QTYDISC', 'PORTLANDED',
+                            'NESPP3', 'GEARCODE', 'GEARCAT', 'PERMIT', 'VESID', 'SERIAL_NUM', "STATE1", "DATESAIL", 'LAT','LON'))
+} 
+
+
+if (noaa_data_source == "dmis") {
+  message("Merging Vessel Log Gear Data by TRIPID..")
+  # FIN <- merge(FIN, QUERY_RESULT, by='SERIAL_NUM', all.x = TRUE, all.y = TRUE)
+  QUERY_RESULT <- unique(as_tibble(QUERY_RESULT))
+  TEST_1 <- NROW(FIN)
+  # QUERY_RESULT <- unique(as_tibble(QUERY_RESULT %>% dplyr::rename(TRIPID = TRIPID_check)))
+  #### merge GEARID on TRIPID if DMIS
+  FIN <- as_tibble(merge(FIN, QUERY_RESULT, by='IDNUM', all.x = TRUE, all.y = FALSE, suffixes = c("",".y")))
+  if (NROW(FIN) != TEST_1) stop("Merging Permits increased number of rows, which shouldn't happen")
+  # message("Merging gearids based on SERIAL_NUM and matching ", comma_format()(length(intersect::base(FIN$TRIPID, FIN$TRIPID_check)))," TRIPID's")
+  # dim(FIN)
+  FIN <- subset(FIN, select=c('PORTLANDED', 'PORTLND1', 'YEAR', 'MONTH', 'DATESAIL', 'GEARCODE', 'GEARCAT', 'NESPP3', 'SPPNM', 'QTYKEPT', 'LIVE',
+                              'REVENUE', 'FMP', 'IDNUM', 'SERIAL_NUM', "DOCID", 'TRIPID', 'PERMIT', "STATE1", "SOURCE", "DEALNUM", "DAS",'LAT','LON')) # *added STATE1 variable
+}
+
+# comma_format()(nrow(FIN))
+# save(FIN, file="DMIS2_SERIAL_NUM.Rdata")
+# add revenue data using for-hire fees Linear Transformation by multiplying anglers by Average For-Hire Fee
+# for_hire_fees <- for_hire_fees %>% mutate(YEAR = as.integer(YEAR))
+
+if (noaa_data_source == "rec") { #create revenue for rec
+  # read in for hire data through original excel file instead?
+  # for_hire_fees <- as_tibble(read.csv("./data-raw/For-Hire_Fee.csv", as.is = TRUE))
+  
+  for_hire_fees <- offshoreWind::for_hire_fees %>%  # get clean and ready for join
+    dplyr::rename("YEAR" = Year) %>% 
+    mutate(YEAR = as.character(YEAR))
+  
+  FIN <- FIN %>% mutate(YEAR = as.integer(YEAR))
+  for_hire_fees <- for_hire_fees %>% mutate(YEAR = as.integer(YEAR))
+  # FIN <- FIN %>% dplyr::mutate(STATE1 = replace_na(STATE1, ""))
+  # FIN %>% distinct(., STATE1)
+  
+  FIN <- FIN %>% left_join(for_hire_fees, by = "YEAR") # join for-hire fees based on year to create state columns
+  
+  FIN <- as.data.frame(FIN)
+  # create a single column of for-hire fees based on state columns
+  FIN$for_hire_fee <-
+    FIN[cbind(
+      seq_len(nrow(FIN)),
+      match(FIN$STATE1, colnames(FIN))
+    )]
+  
+  message("Multiplying for-hire fees by number of anglers..")
+  FIN <- FIN %>% 
+    mutate(for_hire_fee = as.double(for_hire_fee)) %>% # make for hire fee a double 
+    dplyr::select(-c(setdiff(names(for_hire_fees), "YEAR"))) %>% # remove joined state fee columns except for the YEAR column
+    mutate(REVENUE = for_hire_fee*NANGLERS) # create revenue by multiplying for-hire fees by anglers
+  message("Done.")
+
+  # join TRIPIDs to overlap GEARIDs
+  GEARID_to_TRIPID <- as_tibble(offshoreWind::GEARID_QUERY)
+  GEARID_to_TRIPID <- GEARID_to_TRIPID %>% 
+    dplyr::select(-SERIAL_NUM) %>% 
+    dplyr::rename("IDNUM" = GEARID)
+  GEARID_to_TRIPID <- GEARID_to_TRIPID[ which(GEARID_to_TRIPID$YEAR_L >= START.YEAR & GEARID_to_TRIPID$YEAR_L <= END.YEAR+1),]
+
+  inside_areas_combined_trip <- as_tibble(merge(x=inside_areas_combined, y=GEARID_to_TRIPID,
+                       by.x=c('IDNUM','Year'), by.y=c('IDNUM','YEAR_L'),
+                       all.x=TRUE, all.y=TRUE)) # Old Merge
+
+  inside_areas_combined_trip <- as_tibble(inside_areas_combined_trip %>% 
+    dplyr::select(-IDNUM))
+  # distinct(inside_areas_combined_trip, Inside)
+  
+} 
+
+
+########################################################################################################################################
+if (noaa_data_source == "vtr"|| noaa_data_source == "dmis") {
+  
+# Merge raster overlap with VTR/DMIS data - check if imgids recycle
+message("Merging area data with ", ifelse(noaa_data_source=="vtr", "VTR", ifelse(noaa_data_source=="rec", "REC", ifelse(noaa_data_source=="dmis", "DMIS", "DMIS"))), " data by IDNUM and year..")
+ptm.TOTAL = Sys.time()
+REVENUEFILE <- as_tibble(merge(x=inside_areas_combined, y=FIN, 
+                     by.x=c('IDNUM','Year'), by.y=c('IDNUM','YEAR'),
+                     all.x=TRUE, all.y=TRUE)) # Old Merge
+
+# REVENUEFILE2 <- as_tibble(merge(inside_areas_combined, FIN, 
+#                                by.x=c("IDNUM","Year"), by.y=c("IDNUM","YEAR"), 
+#                                all.X=TRUE,all.y=FALSE)) # Merge from Gerets markdown - *** the y join is now false ??right join??
+# REVENUEFILE3 <- as_tibble(merge(x=FIN, y=inside_areas_combined, 
+#                      by.x=c('IDNUM','YEAR'), by.y=c('IDNUM','Year'),
+#                      all.x=TRUE, all.y=TRUE)) # Old Merge with tables switched
+
+# colnames(FIN)
+# comma_format()(nrow(REVENUEFILE))
+# test <- REVENUEFILE %>% filter(!is.na(Area))
+
+message(paste0("Run time ", round(difftime(Sys.time(), ptm.TOTAL, units='secs'), 2), " seconds for merge"))
+message(comma_format()(length(base::intersect(inside_areas_combined$IDNUM, FIN$IDNUM))), " GearID matches from area data..") # number of matches from source data to area data through gearid
+}
+########################################################################################################################################
+
+########################################################################################################################################
+if (noaa_data_source == "rec") {
+# Merge raster overlap with REC data - check if imgids recycle
+message("Merging area data with REC data by TRIPID and year..")
+ptm.TOTAL = Sys.time()
+
+REVENUEFILE <- as_tibble(merge(x=inside_areas_combined_trip, y=FIN,
+                     by.x=c('TRIPID','Year'), by.y=c('TRIPID','YEAR'),
+                     all.x=TRUE, all.y=TRUE)) # Old Merge
+
+
+message(paste0("Run time ", round(difftime(Sys.time(), ptm.TOTAL, units='secs'), 2), " seconds for merge"))
+
+# message(comma_format()(length(base::intersect(inside_areas_combined_trip$TRIPID, FIN$TRIPID))), " TRIPID matches from area data..") # number of matches from source data to area data through gearid
+message(comma_format()(length(base::intersect(inside_areas_combined$IDNUM, FIN$IDNUM))), " TRIPID matches from area data..") # number of matches from source data
+
+}
+
+
+# NOTE: The hullnum/vesid is filling in the permit number for clam trips, which don't have a permit attached to the record in the SFCLAM database. This will create NA's in the data
+# if (noaa_data_source == "vtr") { # fix hull number and clam data
+# REVENUEFILE <- REVENUEFILE[!is.na(REVENUEFILE$IDNUM),]
+# REVENUEFILE$PERMIT[which(REVENUEFILE$GEARCODE=='DRC'& is.na(REVENUEFILE$PERMIT) & !is.na(REVENUEFILE$VESID))] <- REVENUEFILE$VESID[which(REVENUEFILE$GEARCODE=='DRC'& is.na(REVENUEFILE$PERMIT) & !is.na(REVENUEFILE$VESID))]
+# } else if (noaa_data_source == "dmis1" || noaa_data_source == "dmis") {
+# REVENUEFILE <- REVENUEFILE[!is.na(REVENUEFILE$IDNUM),]
+# REVENUEFILE$PERMIT[which(REVENUEFILE$GEARCODE=='DRC'& is.na(REVENUEFILE$PERMIT))] <- REVENUEFILE$VESID[which(REVENUEFILE$GEARCODE=='DRC'& is.na(REVENUEFILE$PERMIT))]
+# }
+
+#There are a few trips which are left over from the earlier raster processing
+# (not in the most recent data for whatever reason) 528 observations, but less trips total.
+
+REVENUEFILE <- REVENUEFILE[!is.na(REVENUEFILE$PERMIT),]
+#Dropping observations with pelagic gear
+
+REVENUEFILE$Inside[which(is.na(REVENUEFILE$Inside))] <- 0
+REVENUEFILE$InsideREV <- REVENUEFILE$Inside*REVENUEFILE$REVENUE
+
+REVENUEFILE$QTYKEPT[which(is.na(REVENUEFILE$QTYKEPT))] <- 0
+REVENUEFILE$InsideLANDED <- REVENUEFILE$Inside*REVENUEFILE$QTYKEPT
+
+REVENUEFILE$Area[which(is.na(REVENUEFILE$Area))] <- 'Other'
+
+# if (noaa_data_source == "vtr" || noaa_data_source == "dmis1") {
+  REVENUEFILE$InsideDAS <- REVENUEFILE$Inside*REVENUEFILE$DAS
+  REVENUEFILE$LIVE[which(is.na(REVENUEFILE$LIVE))] <- 0
+# }
+
+# Need quanty kept and quantity discarted for InsideLanded variable
+if (noaa_data_source == "vtr"|| noaa_data_source == "rec") {
+REVENUEFILE$QTYDISC[which(is.na(REVENUEFILE$QTYDISC))] <- 0
+REVENUEFILE$TOTCATCH <- REVENUEFILE$LIVE+REVENUEFILE$QTYDISC
+REVENUEFILE$InsideCATCH <- REVENUEFILE$Inside*REVENUEFILE$TOTCATCH
+
+# Check vessle lengths - need access to permit table to run ship length R script
+# REVENUEFILE$vesselcat = "U"
+# REVENUEFILE$vesselcat[which(REVENUEFILE$LEN <50)] <- "S"
+# REVENUEFILE$vesselcat[which(REVENUEFILE$LEN >=50 & REVENUEFILE$LEN < 70)] <- "M"
+# REVENUEFILE$vesselcat[which(REVENUEFILE$LEN >=70)] <- "L"
+
+if (is.na(NROW(REVENUEFILE[which(is.na(REVENUEFILE$TOTCATCH)),]))) stop("Some Total Catch is zero")
+  }
+
+REVENUEFILE$BROADZONE <- REVENUEFILE$Area
+# change area names ??
+# REVENUEFILE$BROADZONE[REVENUEFILE$Area%in%c('Primary_Recommendation','Secondary_Recommendation')] <- "Recommendation"
+# REVENUEFILE$BROADZONE[REVENUEFILE$Area%in%MGAREA] <- "Recommendation"
+
+# REVENUEFILE$SPPNM[REVENUEFILE$NESPP3==801] <- "INSHORE LONGFIN SQUID"
+REVENUEFILE$SPPNM[REVENUEFILE$NESPP3%in%c(11,12)] <- "MONKFISH" # ***could this be the monkfish issue?
+REVENUEFILE$SPPNM[REVENUEFILE$NESPP3%in%c(769)] <- "SURF CLAM"
+REVENUEFILE$SPPNM[REVENUEFILE$NESPP3%in%c(754,755)] <- "OCEAN QUAHOG"
+
+#FIN <- REVENUEFILE
+
+# if (save_files == "r" | save_files == "b" ) {
+#   save(REVENUEFILE,file=file.path(output_f, paste0(project_name,"_Data.Rdata",sep="")))
+# }
+# 
+# if (save_files == "c" | save_files == "b" ) {
+#   write.csv(REVENUEFILE,file=file.path(output_f, paste0(project_name,"_Data.csv",sep="")))
+# }
+
+
+REVENUEFILE_backup <- REVENUEFILE
+
+# TODO: This part was added to troubleshoot an issue and can be refactored
+# get character vector of all zones except "Other"
+allZones1 <- sort(unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ]) 
+# as.factor(unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ])
+allZones <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", allZones1), perl=TRUE) # make name pretty
+
+
+# TODO: add column of areas with underscores to REVENUEFILE to reduce repeated code ???
+
+# min(max(length(unique(nespp3))),7)
+ 
+```
+
+```{r adjust_nominal_values_to_real_values, eval = T} 
+# Adjusting nominal values to real values  
+
+# note **** there are NAs in REVENUE
+
+#####################################################################################################################
+
+# Set deflator based on year
+
+# Testing
+# deflate_by = "quarter"
+# base_year = 2019
+# base_quarter = "Q1"
+# REVENUEFILE <- REVENUEFILE_backup
+
+if(deflate_by=="year") {
+  REVENUEFILE <- REVENUEFILE %>%
+    mutate(nominal_revenue = REVENUE)
+  
+  GDPDEF_annual <- offshoreWind::GDPDEF_annual %>% dplyr::select(GDPDEF, Year) #  reduce columns
+  
+  REVENUEFILE <- as_tibble(merge(REVENUEFILE, GDPDEF_annual, by="Year", all.x=TRUE))
+  
+  REVENUEFILE[["REVENUE"]] <- REVENUEFILE[["nominal_revenue"]]*
+    unique(GDPDEF_annual$GDPDEF[GDPDEF_annual$Year==base_year])/REVENUEFILE$GDPDEF
+  
+  REVENUEFILE$GDPDEF <- NULL
+
+  FIN <- FIN %>%
+    mutate(nominal_revenue = REVENUE) %>% 
+    dplyr::rename("Year"=YEAR)
+
+  GDPDEF_annual <- offshoreWind::GDPDEF_annual %>% dplyr::select(GDPDEF, Year) #  reduce columns
+  FIN <- as_tibble(merge(FIN, GDPDEF_annual, by="Year", all.x=TRUE))
+  FIN[["REVENUE"]] <- FIN[["nominal_revenue"]]*
+    unique(GDPDEF_annual$GDPDEF[GDPDEF_annual$Year==base_year])/FIN$GDPDEF
+  FIN$GDPDEF <- NULL
+}
+# save(REVENUEFILE, file="REVENUEFILE.Rdata")
+
+#####################################################################################################################
+# Set deflator based on year and quarter
+
+if(deflate_by=="quarter") {
+
+  REVENUEFILE <- REVENUEFILE %>%
+    mutate(nominal_revenue = REVENUE) %>%  # create column for old revenue
+    # mutate(MONTH = as.integer(format(DATESAIL,"%m"))) %>% # create column for MONTHth
+    mutate(MONTH = as.integer(MONTH)) %>% # make sure MONTH is integer
+    mutate(nominal_revenue = REVENUE) %>%  # Setup column for old revenue values
+    mutate(Quarter = "") %>% # Create quarters column
+    mutate(Quarter = ifelse(MONTH %in% 1:3, "Q1", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 4:6, "Q2", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 7:9, "Q3", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 10:12 , "Q4", Quarter))
+  # dplyr::select(-MONTH) # remove MONTHth column
+
+  # REVENUEFILE <- REVENUEFILE %>% dplyr::select(IDNUM, REVENUE, nominal_revenue, Year, DATESAIL, MONTH, Quarter) # testing
+
+  # GDPDEF_quarterly <- offshoreWind::GDPDEF_quarterly %>%
+  #   dplyr::select(GDPDEF, Year, MONTH) %>%  #  reduce to relevant columns
+  #   mutate(Quarter = "") %>% # Create quarters column
+  #   mutate(Quarter = ifelse(MONTH %in% 1:3, "Q1", Quarter)) %>%
+  #   mutate(Quarter = ifelse(MONTH %in% 4:6, "Q2", Quarter)) %>%
+  #   mutate(Quarter = ifelse(MONTH %in% 7:9, "Q3", Quarter)) %>%
+  #   mutate(Quarter = ifelse(MONTH %in% 10:12 , "Q4", Quarter)) %>%
+  #   dplyr::select(GDPDEF, Year, Quarter)
+
+  # *** pulled from the online link below instead of a downloaded csv file
+
+  FIN <- FIN %>%
+    mutate(nominal_revenue = REVENUE) %>%  # create column for old revenue
+    # mutate(MONTH = as.integer(format(DATESAIL,"%m"))) %>% # create column for MONTHth
+    mutate(MONTH = as.integer(MONTH)) %>% # make sure MONTH is integer
+    mutate(nominal_revenue = REVENUE) %>%  # Setup column for old revenue values
+    mutate(Quarter = "") %>% # Create quarters column
+    mutate(Quarter = ifelse(MONTH %in% 1:3, "Q1", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 4:6, "Q2", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 7:9, "Q3", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 10:12 , "Q4", Quarter))
+
+  #####################################################################################################################
+  #####################################################################################################################
+  # pull from online text file at https://fred.stlouisfed.org/data/GDPDEF.txt instead of a flat file
+  temp <- tempfile()
+  temp.connect <- url("https://fred.stlouisfed.org/data/GDPDEF.txt")
+  temp <- data.table(read.delim(temp.connect, fill=FALSE, stringsAsFactors=FALSE, skip = 15))
+  temp <- temp %>% separate(col= "DATE..........VALUE", into=c("DATE", "GDPDEF"), sep="  ", convert=TRUE)
+  temp$DATE <- as.Date(temp$DATE)
+  temp$GDPDEF <- as.double(temp$GDPDEF)
+
+  GDPDEF_quarterly <- as_tibble(temp %>%
+                                  mutate(MONTH = as.integer(format(DATE,"%m"))) %>%
+                                  mutate(day = as.integer(format(DATE,"%d"))) %>%
+                                  mutate(Year = as.integer(format(DATE,"%Y"))) %>%
+                                  dplyr::select(GDPDEF, Year, MONTH) %>%  #  reduce to relevant columns
+                                  mutate(Quarter = "") %>% # Create quarters column
+                                  mutate(Quarter = ifelse(MONTH %in% 1:3, "Q1", Quarter)) %>%
+                                  mutate(Quarter = ifelse(MONTH %in% 4:6, "Q2", Quarter)) %>%
+                                  mutate(Quarter = ifelse(MONTH %in% 7:9, "Q3", Quarter)) %>%
+                                  mutate(Quarter = ifelse(MONTH %in% 10:12 , "Q4", Quarter)) %>%
+                                  dplyr::select(GDPDEF, Year, Quarter))
+
+  #####################################################################################################################
+  #####################################################################################################################
+  # Deflate revenue file using GPD deflator
+
+  REVENUEFILE <- as_tibble(merge(REVENUEFILE, GDPDEF_quarterly, by=c("Year", "Quarter"), all.x=TRUE, all.y=FALSE))
+
+  FIN <- as_tibble(merge(FIN, GDPDEF_quarterly, by=c("Year", "Quarter"), all.x=TRUE, all.y=FALSE))
+
+  # REVENUEFILE %>% # check NAs
+  #   dplyr::select(everything()) %>%
+  #   summarise_all(list(~ sum(is.na(.))))
+  # GDPDEF_quarterly <- GDPDEF_quarterly %>% arrange(desc(Year,Quarter)) # check data
+
+  REVENUEFILE[["REVENUE"]] <- REVENUEFILE[["nominal_revenue"]]*
+    unique(GDPDEF_quarterly$GDPDEF[GDPDEF_quarterly$Year==base_year&GDPDEF_quarterly$Quarter==base_quarter])/REVENUEFILE$GDPDEF # apply deflator to nominal revenue
+
+  # REVENUEFILE <- REVENUEFILE %>% dplyr::select(-GDPDEF, -Quarter) # Remove irrelevant columns
+  REVENUEFILE <- REVENUEFILE %>% dplyr::select(-GDPDEF) # Remove irrelevant columns
+
+
+  FIN[["REVENUE"]] <- FIN[["nominal_revenue"]]*
+    unique(GDPDEF_quarterly$GDPDEF[GDPDEF_quarterly$Year==base_year&GDPDEF_quarterly$Quarter==base_quarter])/FIN$GDPDEF # apply deflator to nominal revenue
+
+  # REVENUEFILE <- REVENUEFILE %>% dplyr::select(-GDPDEF, -Quarter) # Remove irrelevant columns
+  FIN <- FIN %>% dplyr::select(-GDPDEF) # Remove irrelevant columns
+
+}
+
+# create revenue deflation note for vignette:
+revenue_deflation_note <- ""
+revenue_deflation_note <- paste0("Revenue values have been deflated to ", if_else(deflate_by == "quarter", paste0(base_quarter," "),""), base_year, " dollars." )
+
+
+# Use the API from Federal Reserve site using 3rd party R package
+# library(alfred)
+# # Download industrial production index releases from March 2015 for 2013.
+# get_alfred_series("INDPRO", "test",
+#                   observation_start = "2013-03-01", observation_end = "2013-03-30",
+#                   realtime_start = "2015-02-02", realtime_end = "2015-02-02")
+# # Wrapper for getting only most recent releases
+# get_fred_series("INDPRO", "indpro", observation_start = "2009-03-01", observation_end = "2009-03-01")
+
+# create new folder for section
+dir.create(file.path(output_f, "revenuefile"), showWarnings = FALSE)
+dir.create(file.path(output_f, "fin"), showWarnings = FALSE)
+output_revenuefile = file.path(output_f, "revenuefile")
+output_fin = file.path(output_f, "fin")
+
+safe_file_name <- paste0("_",substr(gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("-","_", gsub("/","-", wind_area_name))), perl=TRUE),0,50),".RData")
+
+# if (save_files == "c" | save_files == "b" ) {
+#   write.csv(FIN, file=file.path(output_revenuefile, paste0("FIN", safe_file_name)), row.names=FALSE)
+#   write.csv(REVENUEFILE, file=file.path(output_fin, paste0("REVENUEFILE", safe_file_name)), row.names=FALSE)
+# }
+
+# save(FIN, file=file.path(output_revenuefile, paste0("FIN", safe_file_name)))
+# save(REVENUEFILE, file=file.path(output_fin, paste0("REVENUEFILE", safe_file_name)))
+
+# backups for testing
+FIN_backup <- FIN
+REVENUEFILE_backup <- REVENUEFILE
+
+# create new folder for section
+dir.create(file.path(output_f, "REVENUEFILEs"), showWarnings = FALSE)
+output_revenue = file.path(output_f, "REVENUEFILEs")
+
+if (length(proj_area_name) == 1) {
+  save(REVENUEFILE, file= file.path(output_revenue, paste0("REVENUEFILE_", proj_area_name, ".rdata"))) # save revenuefile if number of areas is 1
+} else if(length(proj_area_name) > 1 & overlap_data_source == "folder") {
+  save(REVENUEFILE, file= file.path(output_revenue, paste0("REVENUEFILE_", basename(overlap_data_path), ".rdata"))) # save revenuefile if more than 1 area and overlap data comes from a folder - save as name of folder
+} else {
+  save(REVENUEFILE, file= file.path(output_revenue, paste0("REVENUEFILE_", proj_area_name[1],"_and_other_areas", ".rdata"))) # save revenuefile if more than 1 area and any other edge cases
+}
+
+
+
+
+# REVENUEFILE_folder_overlap_source <- REVENUEFILE
+# save(REVENUEFILE_folder_overlap_source, file = "REVENUEFILE_folder_overlap_source.rdata")
+
+# REVENUEFILE_oracle_overlap_source <- REVENUEFILE
+# save(REVENUEFILE_oracle_overlap_source, file = "REVENUEFILE_oracle_overlap_source.rdata")
+
+# dim(REVENUEFILE_folder_overlap_source)
+# dim(REVENUEFILE_oracle_overlap_source)
+# rm(REVENUEFILE_folder_overlap_source,REVENUEFILE_oracle_overlap_source)
+
+```
+
+```{r create_map_of_lease_area, eval = T} 
+  crs <- CRS("+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0")
+
+# if (params$skip_google_drive_access) {
+#   all_areas <- offshoreWind::all_areas
+# } else {
+# # Download project area shapefiles from Google Drive and load
+# temp <- tempfile(fileext = ".zip")
+# dl <- drive_download(
+#   as_id(Project_Areas_12_3_2019_id), path = temp, overwrite = TRUE)
+# out <- unzip(temp, exdir = tempdir())
+# 
+# all_areas <- rgdal::readOGR(dsn=file.path(dirname(out)[1]), layer="Project_Areas_12_3_2019", verbose=F)
+# # all_areas = rgdal::readOGR(dsn=file.path(raw_data_path,"Project_Areas_12_3_2019"), layer="Project_Areas_12_3_2019", verbose=F) # load shapefiles from raw data folder
+# }
+
+if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name)) {
+  
+all_areas <- spTransform(offshoreWind::all_areas, CRS=crs)
+all_areas <- sf::st_as_sf(all_areas)
+
+lease_area <- all_areas %>% dplyr::filter(NAME == proj_area_name)
+
+states <- map_data("state")
+east_coast <- subset(states, region %in% c("maine", "massachusetts", "vermont", "new hampshire","rhode island", "connecticut", "new york", "pennsylvania", 
+                                           "new jersey", "maryland", "delaware", "district of columbia", "virginia", "west virginia", "north carolina"))
+# Wind area extent
+xlim <- c(-78, -70)
+ylim <- c(36, 42)
+
+lease_area_map <- ggplot(data = east_coast) + 
+  geom_polygon(aes(x = long, y = lat, group = group), fill = "#D1D1E0", color = "black") +
+  geom_sf(data = lease_area, fill= "red", color = "red") +
+  coord_sf(xlim = xlim, ylim = ylim) +
+  ggtitle(wind_area_name) +
+  theme(axis.title.y=element_blank(),
+        axis.title.x=element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  # theme(axis.text.x = element_blank(),
+  #       axis.text.y = element_blank(),
+  #       axis.ticks = element_blank(),
+  #       rect = element_blank(),
+  #       axis.title.y=element_blank(),
+  #       axis.title.x=element_blank())
+
+}
+
+if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == FALSE & shapefile_path != "") {
+  layer_name = unique(gsub(pattern="(.+)(.shp$)","\\1", ignore.case = TRUE , list.files(path=shapefile_path, pattern = "(.+)(.shp$)", ignore.case =TRUE, recursive=F, full.names=F)))
+  
+  if (length(layer_name)>1) {
+  
+  file_list <- list.files(shapefile_path, pattern = "*shp$", full.names = TRUE)
+  shapefile_list <- lapply(file_list, sf::read_sf)
+  # all_areas <- do.call(rbind, shapefile_list)
+  all_areas <- sf::st_as_sf(data.table::rbindlist(shapefile_list))
+  all_areas <- all_areas[,(names(all_areas) %in% c("Name"))]
+  # all_areas <- spTransform(all_areas, CRSobj = crs)
+  # raster::aggregate(all_areas, dissolve = TRUE)
+  
+  #I don't understand the reason for the previous 5 lines of code that define all_areas
+  count <- 0
+  rm(all_areas)
+  for (layer in layer_name) {
+    if (count == 0) {
+      all_areas <- rgdal::readOGR(dsn=shapefile_path, layer=layer, verbose=F)
+      all_areas <- spTransform(all_areas, CRSobj = crs)
+      all_areas@data$NAME <- layer[1]
+      all_areas <- all_areas[,(names(all_areas) %in% c("NAME"))]
+      all_areas
+      count <- count + 1
+    } else {
+      extra_layer <- rgdal::readOGR(dsn=shapefile_path, layer=layer, verbose=F)
+      extra_layer <- spTransform(extra_layer, CRSobj = crs)
+      extra_layer@data$NAME <- layer[1]
+      extra_layer <- extra_layer[,(names(extra_layer) %in% c("NAME"))]
+      extra_layer
+      # lease_area <- raster::aggregate(ab, dissolve = TRUE)
+      all_areas <- raster::union(extra_layer, all_areas) # Combine all lease areas plus maine area into one shapefile
+      rm(extra_layer)
+    }
+  }
+  
+  } else {
+    all_areas <- rgdal::readOGR(dsn=shapefile_path, layer=layer_name, verbose=F)
+  }
+  
+  all_areas <- spTransform(all_areas, CRS=crs)
+  lease_area <- sf::st_as_sf(all_areas)
+  
+  states <- map_data("state")
+  east_coast <- subset(states, region %in% c("maine", "massachusetts", "vermont", "new hampshire","rhode island", "connecticut", "new york", "pennsylvania", 
+                                             "new jersey", "maryland", "delaware", "district of columbia", "virginia", "west virginia", "north carolina"))
+  
+  # get extents of shapefile
+  xmin <- extent(lease_area)[1]
+  xmax <- extent(lease_area)[2]
+  ymin <- extent(lease_area)[3]
+  ymax <- extent(lease_area)[4]
+  
+  # Create custom extent if shape is outside (north or east) of wind areas
+  if (xmax > -71) {
+    new_xmax <- xmax + 3 # fix extent if shape is further out east
+    new_xmin <- new_xmax - 8 
+    xlim <- c(new_xmin, new_xmax)
+  } else {
+    xlim <- c(-78, -70)
+  }
+  
+  if (ymax > 41) {
+    new_ymax <- ymax + 3 # fix extent if shape is further north
+    new_ymin <- new_ymax - 6
+    ylim <- c(new_ymin, new_ymax)
+  } else {
+    ylim <- c(36, 42)
+  }
+  
+  lease_area_map <- ggplot(data = east_coast) + 
+    geom_polygon(aes(x = long, y = lat, group = group), fill = "#D1D1E0", color = "black") +
+    geom_sf(data = lease_area,  fill = c("green","green","red","khaki2","red","khaki2") )+
+    coord_sf(xlim = xlim, ylim = ylim) +
+    ggtitle(wind_area_name) +
+    theme(axis.title.y=element_blank(),
+          axis.title.x=element_blank(),
+          plot.title = element_text(hjust = 0.5))
+}
+
+
+```
+
+<!-- Run to here to get REVENUEFILE -->
+
+
+<!-- Begin section to construct and map aggregated rasters for herring pounds only -->
+
+```{r prep_geotiffs1, include=FALSE, eval=TRUE}  
+# Read in the file attributes of the individual rasters.
+fl<-readRDS(payloadRDS)
+
+
+#I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
+
+FIELD = "QTYKEPT" #Like "REVENUE","QTYKEPT", "QTYDISC", or "CATCH"
+#SET margin to sum over
+MARGIN = c("MY_MARGIN") #Like "SPPNM","NESPP3","GEARCAT","FMP","STATE1". Comment out if want to sum over all margins in a year.  I'm using the custom column called "MY_MARGIN", which I will define later.
+
+
+#Give the files and folders a pretty name.
+readable_name ="herring-only"
+
+logical_subset<-quote(which(FINALstack$NESPP3 %in% c(168) &FINALstack[[FIELD]]>=1)) 
+my_margin_name<-quote(paste(FINALstack$MONTH,readable_name, sep="_"))
+
+
+
+
+export.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"))
+dir.create(export.geotiff.path, recursive=T, showWarnings=FALSE)
+
+#############################################################################
+#############################################################################
+# You shouldn't have to make any changes to this block of code 
+# Create FINALstack by subsetting FIN.  Use the FIN data.table  
+
+# This construction first rows that match the logical. So, we only get rows where herring was retained.
+
+FINALstack=FIN
+FINALstack<-FINALstack[eval(logical_subset),]
+FINALstack = FINALstack[which(!is.na(FINALstack[[FIELD]])),]
+FINALstack = FINALstack[which(FINALstack[[FIELD]]!=0),]
+#THIS IS THE NAME OF MY MARGIN VARIABLE
+#FINAL$MY_MARGIN<-paste(FINAL$MONTH,readable_name, sep="_")
+
+
+FINALstack$MY_MARGIN<-eval(my_margin_name)
+
+
+#We want some information about FINALstack, by "MY_MARGIN"+ "YEAR"
+# Distinct permits, distinct trips, and total amount of FIELD
+FINALstack$FULL_MARGIN<-paste(FINALstack$MY_MARGIN, FINALstack$Year, sep="_")
+
+tsA<-FINALstack %>% 
+  group_by(FULL_MARGIN) %>%
+  mutate(unique_trips = n_distinct(IDNUM),
+         unique_permits = n_distinct(PERMIT),
+         )
+
+tsA<-tsA %>% 
+  group_by(FULL_MARGIN,Year,MONTH) %>%
+  summarize(unique_trips=first(unique_trips),
+            unique_permits=first(unique_permits),
+      total=sum(get(FIELD))
+         )
+tsA$readable_name<-readable_name
+
+tsA<-tsA[c("readable_name","FULL_MARGIN","Year","MONTH","unique_permits","unique_trips","total")]
+
+write.csv(tsA,file=file.path(export.geotiff.path,paste(readable_name,"summary_stats.csv")), row.names=FALSE)
+
+confid_prob<-tsA[(which(tsA$unique_permits<=2)),]
+if (nrow(confid_prob)>=1){
+  write.csv(confid_prob,file=file.path(export.geotiff.path,paste(readable_name,"confidential.csv")), row.names=FALSE)
+}
+rm(tsA)
+```	
+
+```{r makegeotiffs1, include=FALSE, eval=FALSE}  
+source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
+```	
+
+```{r secondary_aggregation, include=FALSE, eval=TRUE} 
+
+#################################################
+# STEP 3 -- Set your mapping options
+#### WHAT ARE YOU TRYING TO Aggregate?
+
+readable_name ="herring-only"
+geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"))
+sp1<-"herring-only_QTYKEPT_"
+z<-paste0("*",sp1,"*.tif")
+mypat1<-glob2rx(z)
+
+outfilestub<-sp1
+out.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
+dir.create(out.geotiff.path, showWarnings = FALSE, recursive=TRUE)
+#################################################
+## END SECTION 4 
+#################################################
+#################################################################################
+###### This script will sum together various geotiffs
+
+######This bit of code gets run over and over and could easily be a separate function or just an Rscript.###################
+list1<- lapply(as.list(list.dirs(path=geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=mypat1)
+parsed_list1 = do.call(rbind, lapply(list1, function(xx) {
+  xx = as.data.frame(xx, stringsAsFactors=F)
+  names(xx) = "FILENAME" 
+  return(xx) }) )      
+
+parsed_list1$NAME = sapply(parsed_list1$FILENAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "/"))
+  return(temp[NCOL(temp)]) })
+
+parsed_list1$NAME <-gsub(".tif","",parsed_list1$NAME)
+
+parsed_list1$MONTH = as.numeric(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[1]) }))
+
+parsed_list1$type = as.character(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[2]) }))
+
+parsed_list1$metric = as.character(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[3]) }))
+
+parsed_list1$YEAR = as.numeric(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[4]) }))
+##########################################################################################################################
+
+
+# Keep months 9,10,11
+
+for (mymonth in 9:11) {
+   yearfileswanted <- parsed_list1[which(parsed_list1$MONTH==mymonth),]
+if (nrow(yearfileswanted)==0){
+#If there are no matching files, do nothing
+  }
+else{   
+# If there is at least 1 matching file, build the name
+outfilename<-paste0(outfilestub,"month_",mymonth,".tif")
+  
+f<-extent(raster(file.path(yearfileswanted$FILENAME[1])))
+new_xmin<-xmin(f)
+new_ymin<-ymin(f)
+new_xmax<-xmax(f)
+new_ymax<-ymax(f)
+
+
+if (nrow(yearfileswanted)==1){
+#There's nothing really to do except save the raster as outfilename  
+  holding_summer<-raster(file.path(yearfileswanted$FILENAME[1]))
+  writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), overwrite=TRUE)
+}
+else{
+for (pp in 2:nrow(yearfileswanted)){
+  f<-extent(raster(file.path(yearfileswanted$FILENAME[pp])))
+  new_xmin<-min(new_xmin,xmin(f))
+  new_ymin<-min(new_ymin,ymin(f))
+  new_xmax<-max(new_xmax,xmax(f))
+  new_ymax<-max(new_ymax, ymax(f))
+}
+
+## THIS SETS THE NEW EXTENT
+f3<-extent(new_xmin,new_xmax, new_ymin, new_ymax)
+
+holding_summer<-extend(raster(file.path(yearfileswanted$FILENAME[1])), f3, value=0)
+
+for (ppp in 2:nrow(yearfileswanted)){
+  temp<-extend(raster(file.path(yearfileswanted$FILENAME[ppp])), f3, value=0)
+  holding_summer<-temp+holding_summer
+  }
+}
+
+#divide by the number of years
+nobs<-nrow(yearfileswanted)
+#holding_summer<-holding_summer/nobs
+writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), overwrite=TRUE)
+}
+}
+
+```	
+
+```{r check_confidential_secondary_aggregation, include=FALSE, eval=FALSE} 
+#file path with geotiffs that you need to check for confidentiality
+in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
+
+#place to store cleaned geotiffs and cleaned images
+cleaned.geotiff.path<- file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"PII_aggregated")
+cleaned.image.path<-file.path(root.image.path,paste(readable_name,todaysdate,sep="_"),"PII_aggregated")
+
+dir.create(cleaned.geotiff.path, recursive=T, showWarnings=FALSE)
+dir.create(cleaned.image.path, recursive=T, showWarnings=FALSE)
+R.start.time<-Sys.time()
+start.time.total<-R.start.time
+#################################################
+## Adapt Step_7_check_confidentiality to check the  aggregated rasters in the previous step.
+#################################################
+#################################################################################
+####
+######################
+## Outline of the Script Process: 
+# 2) List all the rasters that are going to be processed
+# 3) Put them into "parsed_groups" dataframe, to break the name up and allow us to categorize by group (FMP, species, gear), unit (revenue vs. quantity), and year.
+# 4) When the code runs, you choose a group (such as a particular FMP) and creates temporary subgroups (FMP_REVENUE & FMP_QTYKEPT)
+# 5) Determines the maximum extent of data in the rasters for the whole group (for rasters of both units types)
+# 6) The code then begins to run first the QTYKEPT raster, determines the value-range and breaks the values into classification bins. 
+# 7) Then Min-Yang's confidentiality checker converts each raster to a polygon, and checks that at least 3 distinct permits are in a discrete area.
+#       Re-names the value bins and re-assigns the correct bin-values for the plotted map
+#       The code plots both the original ("raw") and the reclassified map as a png, also saving the CSV of value-cuts for the binning. 
+######################
+
+
+
+#### (3) Set up to work from the FINAL MAPS folder:
+
+# Setup to loop through unique file paths: 
+# List all the rasters in "FINAL MAPS" (below) .... and parse their filenames out into FILEPATH, NAME, and UNIT (further down)
+tif_pat<-glob2rx("*.tif")
+
+rasterlist<- lapply(as.list(list.dirs(path=in.geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=tif_pat)
+
+##############################
+
+# Parse out the names of each raster's file path into chunks
+    parsed_groups = do.call(rbind, lapply(rasterlist, function(xx) { # Takes the list creates dataframe where first column is filepath
+      xx = as.data.frame(xx, stringsAsFactors=F)
+      names(xx) = "FILEPATH" 
+      return(xx) }) ) 
+
+parsed_groups$NAME = sapply(parsed_groups$FILEPATH, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "/"))
+  return(temp[NCOL(temp)]) })
+
+parsed_groups$NAME <-gsub(".tif","",parsed_groups$NAME)
+
+parsed_groups$MONTH =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) { # We are referring to "REVENUE" versus "QTYKEPT here
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[NCOL(temp)]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+ 
+parsed_groups$MONTH<-as.numeric(parsed_groups$MONTH)  
+
+    
+    parsed_groups$TYPE =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) { # GROUP-UNIT combo, as in "BLUEFISHFMP-REVENUE" vs. "BLUEFISHFMP-QTYKEPT"
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[1]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    
+    parsed_groups$METRIC =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[2]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    
+     parsed_groups$EXTRA =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+       temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+       return(temp[3]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    # 
+     parsed_groups$Type_Metric_Extra =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+       temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+       return(file.path(paste0(temp[1],"_",temp[2],"_",temp[3]))) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    # parsed_groups$Type_Metric_Extra <-paste0(parsed_groups$Type_Metric_Extra,"_regime_",parsed_groups$REGIME)
+    #   
+# Drop rows of rasters to ignore - groups of species/year, etc to NOT plot
+  #  parsed_groups <-parsed_groups[(parsed_groups$TYPE %in% c("hrgmack")),] 
+#    parsed_groups <-parsed_groups[(parsed_groups$MONTH %in% c("4","6")),] 
+    
+##########################################
+
+#
+### (4) Loop through the unique filepaths! - List of unique GROUPINPATH names
+list_groupinpath <- sort(unique(parsed_groups$Type_Metric_Extra)) # List of unique GROUPPATHs; will break out into UNIT subgroups inside the loop
+
+    
+############## BEGIN SET IMAGE WINDOW ###################
+xxyy=data.frame() # Start with creating a new list for dimension info
+
+  for (b in (1:nrow(parsed_groups))) {
+    # For plotting rasters in a projected coordinate system
+    
+    extremes <- raster(parsed_groups$FILEPATH[b]) 
+    parsed_groups$total_value[b]<-cellStats(extremes,'sum', na.rm="TRUE")
+    extremes <- rasterToPoints(extremes, fun=function(x){x>1}) 
+    
+
+    extremes.df <- as.data.frame(extremes)
+    
+    max.x <- max(extremes.df$x)
+    min.x <- min(extremes.df$x)
+    max.y <- max(extremes.df$y)
+    min.y <- min(extremes.df$y)
+    xxyy= rbind(xxyy, c(max.x,min.x,max.y,min.y))
+    
+  } # end loop setting up max extent info 
+  
+  # Add column names for ease of comprehension
+  colnames(xxyy)=c("MaxX", "MinX", "MaxY", "MinY")
+  
+  # These are min and max x and y values set for standardizing plot extents
+  extreme.ylimit = c(min(xxyy[,"MinY"]), max(xxyy[,"MaxY"]))
+  extreme.xlimit = c(min(xxyy[,"MinX"]), max(xxyy[,"MaxX"]))
+  
+  
+  ############## END SET IMAGE WINDOW ###################
+  
+
+
+
+# Begin loop through each raster GROUPUNITPATH (as in, each subset of rasters) 
+#  for (i in (5:length(list_groupinpath))){
+# for (i in (1:1 )) {
+
+for (i in (1:length(list_groupinpath))){
+
+# Create a list of rasters that are in that GROUPUNITPATH 
+  temp_rgrouplist <- parsed_groups[parsed_groups$Type_Metric_Extra == list_groupinpath[i],] # All rasters in a GroupPath (As in, in "MONKFISH FMP" - not broken by unit yet)
+  
+  temp_R_list <- temp_rgrouplist
+  temp_R_list$textUnit <- temp_rgrouplist$METRIC
+  
+  ### FIND BINNING & PLOT THE RASTERS in the GROUP    
+if(nrow(temp_R_list) > 1){ # error catch when there was accidentally no Q or R folders for a metier....
+#
+  R.start.time <- Sys.time()
+# You MUST make a new "mylist" object or the sampling will not work correctly. 
+  mylist=list() # for new Jenks binning
+  
+#### Additional code for confidentiality check
+working_group<-temp_R_list
+
+TME<-working_group$Type_Metric_Extra[1]
+
+
+# This comes from the prep_geotiffs1 chunk
+# logical_subset<-quote(which(FINALstack$NESPP3 %in% c(168) &FINALstack[[FIELD]]>=1)) 
+FINAL_W<-FINALstack[eval(logical_subset),]
+FINAL_W = FINAL_W[which(!is.na(FINAL_W[[FIELD]])),]
+FINAL_W = FINAL_W[which(FINAL_W[[FIELD]]!=0),]
+
+# We also keep only the entires where FINAL_W$MONTH matches
+FINAL_W<-FINAL_W[which(FINAL_W$MONTH %in% working_group$MONTH),]
+
+  for (s in (1:nrow(temp_R_list))){ # Do jenks binning on GROUP-UNIT subset, and plot those rasters
+      start.time <- Sys.time()
+      subsamp<-values(raster(temp_R_list$FILEPATH[s]))
+      subsamp<-subsamp[subsamp>jenks.lowerbound]
+      mylist[[s]] = subsamp
+    }
+# Using list of raster cell values, create the jenks breaks
+    myvals<-unlist(mylist) 
+    myvals<-myvals/rescale_factor
+    glob_max<-floor(max(myvals)) 
+    
+    mysubs<-sample(myvals,num_jenks_subs) # sampling occurs here, refers back to the "set.seed"
+    myclass <- classIntervals(mysubs, n=nbreaks,style="jenks", warnLargeN=FALSE, largeN=6000)
+    mybreaks_class1<-c(0,myclass$brks) # Here we add a "zero" bin, manually. 
+    
+# Now we set up ANOTHER loop to plot the rasters in temp_rasterlist
+for (t in (1:nrow(temp_R_list))){
+  
+      #To fix this, we will set all raster values greater than the upper bound to be slightly less than this upper bound
+      myras<-raster(temp_R_list$FILEPATH[t])
+      myras<-myras/rescale_factor
+         # myras_proj <- projectRaster(myras, crs=PROJ.LATLON)
+      
+      mygroup <- as.character(temp_R_list$Type_Metric_Extra[t])
+      ub=mybreaks_class1[length(mybreaks_class1)]
+      myras[myras>=ub]<-floor(ub)
+      
+#########
+# Min-Yang's code changes for reclassification to 1-6 from value bins
+  blength <-length(mybreaks_class1)-1
+  myclass_matrix <- cbind(mybreaks_class1[1:blength],c(mybreaks_class1[2:blength],glob_max), 1:blength)                      
+  
+  myr2<-reclassify(myras,myclass_matrix, include.lowest=TRUE, right=TRUE)
+  
+  colnames(myclass_matrix)<-c("LB","UB","CATEGORY")
+  cutnames<-working_group$NAME[1]
+  cutnames<-gsub(" ", "_", cutnames)
+  cutnames<-gsub("/", "_", cutnames)
+  cutnames<-paste0(cutnames,".csv")
+  
+  write.csv(myclass_matrix, file=file.path(cleaned.geotiff.path,cutnames),  row.names=FALSE)
+
+  working_month<-as.numeric(temp_R_list$MONTH[t])
+  
+  ############################Be careful here ##################################
+  #SUBSET THE DATASET -- FINAL_w holds the metier in memory, be each tiff needs to be subset by month.
+  FINAL_wy=FINAL_W[which(FINAL_W$MONTH==working_month),]
+  shortlist<-c("IDNUM","PERMIT","LAT","LON")
+  FINAL_wyshort=unique(FINAL_wy[shortlist])
+  ############################Be careful here ##################################
+
+  source(file.path(project_root_path,"R_code/production_confidential_checker.R"))
+
+#########
+
+# Now set up to plot this GROUP of rasters, with the above-determined binning scheme
+
+  # Filename for 'RAW' plotted png
+  png_filename=paste0("raw_", temp_R_list$NAME[t], ".png")
+  rawPNG.file <- file.path(cleaned.image.path, png_filename)
+  
+  
+  my.month<-temp_R_list$MONTH[t]
+  my.month[which(my.month==0)]<-"N/A"
+  my.month<-paste0("Month=",my.month)
+  
+  #my.gear<-paste0("Gear=",temp_R_list$GEAR[t])
+  
+  
+  
+  
+  # Filename for RECLASSIFIED plotted map png
+      reclass_filename=paste0("reclass_", temp_R_list$NAME[t], ".png")
+      reclassPNG.file <- file.path(cleaned.image.path, reclass_filename)
+      
+      # Create a graphical object of text
+
+      our.max.pixels = 8e8 # This is slightly larger than the number of cells in the baseraster (the max number of cells possible)
+      
+      jcons<-levelplot(myras, 
+                       raster=TRUE,
+                       #aspect="xy",
+                       maxpixels=our.max.pixels,
+                       margin=FALSE, 
+                       #main=title_opts1,                  
+                       par.setting=mycoloropts, scales=myscaleopts, at=mybreaks_class1, 
+                       xlim=extreme.xlimit,ylim=extreme.ylimit, 
+                       colorkey=myckey 
+                      )
+# OUTPUT  for the RAW raster 
+      png(file=rawPNG.file, width=png.width, height=png.height, units="px"
+          , bg="white")
+      
+      
+      
+      print(jcons+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
+            + layer(sp.lines(NLS_grnd))+ layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
+            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            
+      )
+      
+      # print(jcons 
+      #       + layer(sp.polygons(my_basemap2,fill=mylandfill))
+      #       + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
+            #+ layer(grid.draw(gr.text))
+     # )
+      dev.off()
+##################################      
+      end.time <- Sys.time()
+      #print(paste0("REVENUE rasters were built in ", round((end.time - start.time), digits=2), " minutes."))
+      
+##### 
+      #reclass_gtiff_name<-gsub(".png", ".tif", reclass_filename) 
+      reclass_gtiff_name<-gsub(".png", ".tif", reclass_filename) 
+      #store the reclassified raster.
+      writeRaster(myr2, file.path(cleaned.geotiff.path,reclass_gtiff_name), format="GTiff", overwrite=T)
+      
+      our.max.pixels = 550000 #8e6 # This is slightly larger than the number of cells in the baseraster (the max number of cells possible)
+      
+      mylegend<-floor(mybreaks_class1)
+      #sub in the true largest value 
+      mylegend[length(mylegend)]<-glob_max
+      myckey2<-list(at=seq(0, length(mylegend)-1, 1), labels=list(at=seq(0,length(mylegend)-1,1),labels=mylegend, cex=2))
+      
+      rclassed<-levelplot(myr2,  
+                            #raster=TRUE,
+                            #aspect="xy",
+                            maxpixels=our.max.pixels,
+                            margin=FALSE,
+                            col.regions=brewer.friendly.bupu,scales=myscaleopts,
+                            at=seq(0, length(mylegend)-1, 1),
+                            xlim=extreme.xlimit,ylim=extreme.ylimit,
+                            colorkey=myckey2
+                            )
+      
+      png(file=reclassPNG.file, width=png.width, height=png.height, units="px"
+          , bg="white")
+      
+      print(rclassed+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
+            + layer(sp.lines(NLS_grnd))+ layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
+            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            
+      )
+      #print(rclassed
+       #     + layer(sp.polygons(my_basemap2,fill=mylandfill))
+        #    + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
+            #+ layer(grid.draw(gr.text))
+      #)
+      dev.off()
+      
+###     
+      print(paste0("You just made the ",reclass_gtiff_name, " image" ))
+      
+    }  
+    # END loop plotting REVENUE rasters
+##############
+    R.end.time <- Sys.time()
+} # End error-catch for R list < 5 rows
+
+    print(paste0("Started at ", (R.start.time)," and ended at ", R.end.time, ". Total time: ", (R.end.time - R.start.time)))
+    print("------------------")
+################################
+### Ends where the rasters are individually plotted
+  } 
+
+# Ends whole loop!
+end.time.total <- Sys.time()
+end.time.total-start.time.total
+
+############################
+####
+csv_out<-file.path(cleaned.geotiff.path,"parsed_groups.csv")
+write.csv(parsed_groups, csv_out)
+
+#store these paths to make the including images a little easier.
+cleaned.geotiff.path1<-cleaned.geotiff.path
+cleaned.image.path1<-cleaned.image.path
+
+```	
+<!-- End section to construct and map aggregated rasters for herring pounds only -->
+
+<!-- Begim section to construct and map aggregated rasters for revenue on trips that retain herring -->
+
+```{r prep_geotiffs2, include=FALSE,eval=TRUE}   
+# Read in the file attributes of the individual rasters.
+
+#I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
+
+FIELD = "REVENUE" #Like "REVENUE","QTYKEPT", "QTYDISC", or "CATCH"
+#SET margin to sum over
+MARGIN = c("MY_MARGIN") #Like "SPPNM","NESPP3","GEARCAT","FMP","STATE1". Comment out if want to sum over all margins in a year.  I'm using the custom column called "MY_MARGIN", which I will define later.
+
+
+#Give the files and folders a pretty name.
+readable_name ="allrev-trips-catch168"
+
+logical_subset<-quote(which(FINALstack$NESPP3 %in% c(168) &FINALstack[[FIELD]]>=1)) 
+my_margin_name<-quote(paste(FINALstack$MONTH,readable_name, sep="_"))
+
+export.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"))
+dir.create(export.geotiff.path, recursive=T, showWarnings=FALSE)
+
+#############################################################################
+#############################################################################
+# You shouldn't have to make any changes to this block of code 
+# Create FINALstack by subsetting FIN.  Use the FIN data.table  
+FINALstack=FIN
+
+#This construction first keeps the unique TRIPIDs that match the logical (get positive revenue from herring).
+#Then, we retain all the catch records for those TRIPIDs
+IDs<-FINALstack[eval(logical_subset),]
+IDs<-unique(IDs$TRIPID)
+
+FINALstack = FINALstack[which(FINALstack$TRIPID%in%IDs),]
+FINALstack = FINALstack[which(!is.na(FINALstack[[FIELD]])),]
+FINALstack = FINALstack[which(FINALstack[[FIELD]]!=0),]
+#THIS IS THE NAME OF MY MARGIN VARIABLE
+#FINAL$MY_MARGIN<-paste(FINAL$MONTH,readable_name, sep="_")
+FINALstack$MY_MARGIN<-eval(my_margin_name)
+
+
+
+#We want some information about FINALstack, by "MY_MARGIN"+ "YEAR"
+# Distinct permits, distinct trips, and total amount of FIELD
+FINALstack$FULL_MARGIN<-paste(FINALstack$MY_MARGIN, FINALstack$Year, sep="_")
+
+tsA<-FINALstack %>% 
+  group_by(FULL_MARGIN) %>%
+  mutate(unique_trips = n_distinct(IDNUM),
+         unique_permits = n_distinct(PERMIT),
+         )
+
+tsA<-tsA %>% 
+  group_by(FULL_MARGIN,Year,MONTH) %>%
+  summarize(unique_trips=first(unique_trips),
+            unique_permits=first(unique_permits),
+      total=sum(get(FIELD))
+         )
+tsA$readable_name<-readable_name
+
+tsA<-tsA[c("readable_name","FULL_MARGIN","Year","MONTH","unique_permits","unique_trips","total")]
+
+write.csv(tsA,file=file.path(export.geotiff.path,paste(readable_name,"summary_stats.csv")), row.names=FALSE)
+
+confid_prob<-tsA[(which(tsA$unique_permits<=2)),]
+if (nrow(confid_prob)>=1){
+  write.csv(confid_prob,file=file.path(export.geotiff.path,paste(readable_name,"confidential.csv")), row.names=FALSE)
+}
+```	
+
+```{r makegeotiffs2, include=FALSE, eval=FALSE}  
+source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
+
+```	
+
+```{r secondary_aggregation_part2, include=FALSE, eval=TRUE} 
+
+
+#################################################
+# STEP 3 -- Set your mapping options
+#### WHAT ARE YOU TRYING TO Aggregate?
+
+readable_name ="allrev-trips-catch168"
+geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"))
+sp1<-"allrev-trips-catch168_REVENUE_"
+z<-paste0("*",sp1,"*.tif")
+mypat1<-glob2rx(z)
+
+outfilestub<-sp1
+
+out.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
+dir.create(out.geotiff.path, showWarnings = FALSE, recursive=TRUE)
+#################################################
+## END SECTION 4 
+#################################################
+#################################################################################
+###### This script will sum together various geotiffs
+
+
+list1<- lapply(as.list(list.dirs(path=geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=mypat1)
+parsed_list1 = do.call(rbind, lapply(list1, function(xx) {
+  xx = as.data.frame(xx, stringsAsFactors=F)
+  names(xx) = "FILENAME" 
+  return(xx) }) )      
+
+parsed_list1$NAME = sapply(parsed_list1$FILENAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "/"))
+  return(temp[NCOL(temp)]) })
+
+parsed_list1$NAME <-gsub(".tif","",parsed_list1$NAME)
+
+parsed_list1$MONTH = as.numeric(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[1]) }))
+
+parsed_list1$type = as.character(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[2]) }))
+
+parsed_list1$metric = as.character(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[3]) }))
+
+parsed_list1$YEAR = as.numeric(sapply(parsed_list1$NAME, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
+  return(temp[4]) }))
+
+# Keep months 9,10,11
+
+
+for (mymonth in 9:11) {
+   yearfileswanted <- parsed_list1[which(parsed_list1$MONTH==mymonth),]
+if (nrow(yearfileswanted)==0){
+#If there are no matching files, do nothing
+  }
+else{   
+# If there is at least 1 matching file, build the name
+outfilename<-paste0(outfilestub,"month_",mymonth,".tif")
+  
+f<-extent(raster(file.path(yearfileswanted$FILENAME[1])))
+new_xmin<-xmin(f)
+new_ymin<-ymin(f)
+new_xmax<-xmax(f)
+new_ymax<-ymax(f)
+
+
+if (nrow(yearfileswanted)==1){
+#There's nothing really to do except save the raster as outfilename  
+  holding_summer<-raster(file.path(yearfileswanted$FILENAME[1]))
+  writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), overwrite=TRUE)
+}
+else{
+for (pp in 2:nrow(yearfileswanted)){
+  f<-extent(raster(file.path(yearfileswanted$FILENAME[pp])))
+  new_xmin<-min(new_xmin,xmin(f))
+  new_ymin<-min(new_ymin,ymin(f))
+  new_xmax<-max(new_xmax,xmax(f))
+  new_ymax<-max(new_ymax, ymax(f))
+}
+
+## THIS SETS THE NEW EXTENT
+f3<-extent(new_xmin,new_xmax, new_ymin, new_ymax)
+
+holding_summer<-extend(raster(file.path(yearfileswanted$FILENAME[1])), f3, value=0)
+
+for (ppp in 2:nrow(yearfileswanted)){
+  temp<-extend(raster(file.path(yearfileswanted$FILENAME[ppp])), f3, value=0)
+  holding_summer<-temp+holding_summer
+  }
+}
+
+#divide by the number of years
+nobs<-nrow(yearfileswanted)
+#holding_summer<-holding_summer/nobs
+writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), overwrite=TRUE)
+}
+
+}
+
+```	
+
+
+```{r check_confidential_secondary_aggregation2, include=FALSE, eval=FALSE} 
+#file path with geotiffs that you need to check for confidentiality
+in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
+
+#place to store cleaned geotiffs and cleaned images
+cleaned.geotiff.path<- file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"PII_aggregated")
+cleaned.image.path<-file.path(root.image.path,paste(readable_name,todaysdate,sep="_"),"PII_aggregated")
+
+dir.create(cleaned.geotiff.path, recursive=T, showWarnings=FALSE)
+dir.create(cleaned.image.path, recursive=T, showWarnings=FALSE)
+R.start.time<-Sys.time()
+start.time.total<-R.start.time
+#################################################
+## Adapt Step_7_check_confidentiality to check the  aggregated rasters in the previous step.
+#################################################
+#################################################################################
+####
+######################
+## Outline of the Script Process: 
+# 2) List all the rasters that are going to be processed
+# 3) Put them into "parsed_groups" dataframe, to break the name up and allow us to categorize by group (FMP, species, gear), unit (revenue vs. quantity), and year.
+# 4) When the code runs, you choose a group (such as a particular FMP) and creates temporary subgroups (FMP_REVENUE & FMP_QTYKEPT)
+# 5) Determines the maximum extent of data in the rasters for the whole group (for rasters of both units types)
+# 6) The code then begins to run first the QTYKEPT raster, determines the value-range and breaks the values into classification bins. 
+# 7) Then Min-Yang's confidentiality checker converts each raster to a polygon, and checks that at least 3 distinct permits are in a discrete area.
+#       Re-names the value bins and re-assigns the correct bin-values for the plotted map
+#       The code plots both the original ("raw") and the reclassified map as a png, also saving the CSV of value-cuts for the binning. 
+######################
+
+
+
+#### (3) Set up to work from the FINAL MAPS folder:
+
+# Setup to loop through unique file paths: 
+# List all the rasters in "FINAL MAPS" (below) .... and parse their filenames out into FILEPATH, NAME, and UNIT (further down)
+tif_pat<-glob2rx("*.tif")
+
+rasterlist<- lapply(as.list(list.dirs(path=in.geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=tif_pat)
+
+##############################
+
+# Parse out the names of each raster's file path into chunks
+    parsed_groups = do.call(rbind, lapply(rasterlist, function(xx) { # Takes the list creates dataframe where first column is filepath
+      xx = as.data.frame(xx, stringsAsFactors=F)
+      names(xx) = "FILEPATH" 
+      return(xx) }) ) 
+
+parsed_groups$NAME = sapply(parsed_groups$FILEPATH, USE.NAMES=F, function(zz) {
+  temp = do.call(rbind,strsplit(as.character(zz), split = "/"))
+  return(temp[NCOL(temp)]) })
+
+parsed_groups$NAME <-gsub(".tif","",parsed_groups$NAME)
+
+parsed_groups$MONTH =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) { # We are referring to "REVENUE" versus "QTYKEPT here
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[NCOL(temp)]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+ 
+parsed_groups$MONTH<-as.numeric(parsed_groups$MONTH)  
+
+    
+    parsed_groups$TYPE =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) { # GROUP-UNIT combo, as in "BLUEFISHFMP-REVENUE" vs. "BLUEFISHFMP-QTYKEPT"
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[1]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    
+    parsed_groups$METRIC =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+      temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+      return(temp[2]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    
+     parsed_groups$EXTRA =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+       temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+       return(temp[3]) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    # 
+     parsed_groups$Type_Metric_Extra =  sapply(parsed_groups$NAME, USE.NAMES=F, function(zz) {
+       temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
+       return(file.path(paste0(temp[1],"_",temp[2],"_",temp[3]))) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
+    # parsed_groups$Type_Metric_Extra <-paste0(parsed_groups$Type_Metric_Extra,"_regime_",parsed_groups$REGIME)
+    #   
+# Drop rows of rasters to ignore - groups of species/year, etc to NOT plot
+  #  parsed_groups <-parsed_groups[(parsed_groups$TYPE %in% c("hrgmack")),] 
+#    parsed_groups <-parsed_groups[(parsed_groups$MONTH %in% c("4","6")),] 
+    
+##########################################
+
+#
+### (4) Loop through the unique filepaths! - List of unique GROUPINPATH names
+list_groupinpath <- sort(unique(parsed_groups$Type_Metric_Extra)) # List of unique GROUPPATHs; will break out into UNIT subgroups inside the loop
+
+    
+############## BEGIN SET IMAGE WINDOW ###################
+xxyy=data.frame() # Start with creating a new list for dimension info
+
+  for (b in (1:nrow(parsed_groups))) {
+    # For plotting rasters in a projected coordinate system
+    
+    extremes <- raster(parsed_groups$FILEPATH[b]) 
+    parsed_groups$total_value[b]<-cellStats(extremes,'sum', na.rm="TRUE")
+    extremes <- rasterToPoints(extremes, fun=function(x){x>1}) 
+    
+
+    extremes.df <- as.data.frame(extremes)
+    
+    max.x <- max(extremes.df$x)
+    min.x <- min(extremes.df$x)
+    max.y <- max(extremes.df$y)
+    min.y <- min(extremes.df$y)
+    xxyy= rbind(xxyy, c(max.x,min.x,max.y,min.y))
+    
+  } # end loop setting up max extent info 
+  
+  # Add column names for ease of comprehension
+  colnames(xxyy)=c("MaxX", "MinX", "MaxY", "MinY")
+  
+  # These are min and max x and y values set for standardizing plot extents
+  extreme.ylimit = c(min(xxyy[,"MinY"]), max(xxyy[,"MaxY"]))
+  extreme.xlimit = c(min(xxyy[,"MinX"]), max(xxyy[,"MaxX"]))
+  
+  
+  ############## END SET IMAGE WINDOW ###################
+  
+
+
+
+# Begin loop through each raster GROUPUNITPATH (as in, each subset of rasters) 
+#  for (i in (5:length(list_groupinpath))){
+# for (i in (1:1 )) {
+
+for (i in (1:length(list_groupinpath))){
+
+# Create a list of rasters that are in that GROUPUNITPATH 
+  temp_rgrouplist <- parsed_groups[parsed_groups$Type_Metric_Extra == list_groupinpath[i],] # All rasters in a GroupPath (As in, in "MONKFISH FMP" - not broken by unit yet)
+  
+  temp_R_list <- temp_rgrouplist
+  temp_R_list$textUnit <- temp_rgrouplist$METRIC
+  
+  ### FIND BINNING & PLOT THE RASTERS in the GROUP    
+if(nrow(temp_R_list) > 1){ # error catch when there was accidentally no Q or R folders for a metier....
+#
+  R.start.time <- Sys.time()
+# You MUST make a new "mylist" object or the sampling will not work correctly. 
+  mylist=list() # for new Jenks binning
+  
+#### Additional code for confidentiality check
+working_group<-temp_R_list
+
+TME<-working_group$Type_Metric_Extra[1]
+
+
+# This comes from the prep_geotiffs2 chunk
+# logical_subset<-quote(which(FINALstack$NESPP3 %in% c(168) &FINALstack[[FIELD]]>=1)) 
+#############################################################################
+# This construction first keeps the unique TRIPIDs that match the logical (get positive revenue from herring).
+# Then, we retain all the catch records for those TRIPIDs
+
+IDs<-FINALstack[eval(logical_subset),]
+IDs<-unique(IDs$TRIPID)
+# This is a bit unnecessary, since we're checking for 3 or more unique permits and each TRIPID is associated with I permit.  We could just keep 1 row per TRIPID and we basically do that in the unique() that is right before we source the production confidentiality checker.
+FINAL_W = FINALstack[which(FINALstack$TRIPID%in%IDs),]
+FINAL_W = FINAL_W[which(!is.na(FINAL_W[[FIELD]])),]
+FINAL_W = FINAL_W[which(FINAL_W[[FIELD]]!=0),]
+
+# We also keep only the entires where FINAL_W$MONTH matches
+FINAL_W<-FINAL_W[which(FINAL_W$MONTH %in% working_group$MONTH),]
+
+  for (s in (1:nrow(temp_R_list))){ # Do jenks binning on GROUP-UNIT subset, and plot those rasters
+      start.time <- Sys.time()
+      subsamp<-values(raster(temp_R_list$FILEPATH[s]))
+      subsamp<-subsamp[subsamp>jenks.lowerbound]
+      mylist[[s]] = subsamp
+    }
+# Using list of raster cell values, create the jenks breaks
+    myvals<-unlist(mylist) 
+    myvals<-myvals/rescale_factor
+    glob_max<-floor(max(myvals)) 
+    
+    mysubs<-sample(myvals,num_jenks_subs) # sampling occurs here, refers back to the "set.seed"
+    myclass <- classIntervals(mysubs, n=nbreaks,style="jenks", warnLargeN=FALSE, largeN=6000)
+    mybreaks_class1<-c(0,myclass$brks) # Here we add a "zero" bin, manually. 
+    
+# Now we set up ANOTHER loop to plot the rasters in temp_rasterlist
+for (t in (1:nrow(temp_R_list))){
+  
+      #To fix this, we will set all raster values greater than the upper bound to be slightly less than this upper bound
+      myras<-raster(temp_R_list$FILEPATH[t])
+      myras<-myras/rescale_factor
+         # myras_proj <- projectRaster(myras, crs=PROJ.LATLON)
+      
+      mygroup <- as.character(temp_R_list$Type_Metric_Extra[t])
+      ub=mybreaks_class1[length(mybreaks_class1)]
+      myras[myras>=ub]<-floor(ub)
+      
+#########
+# Min-Yang's code changes for reclassification to 1-6 from value bins
+  blength <-length(mybreaks_class1)-1
+  myclass_matrix <- cbind(mybreaks_class1[1:blength],c(mybreaks_class1[2:blength],glob_max), 1:blength)                      
+  
+  myr2<-reclassify(myras,myclass_matrix, include.lowest=TRUE, right=TRUE)
+  
+  colnames(myclass_matrix)<-c("LB","UB","CATEGORY")
+  cutnames<-working_group$NAME[1]
+  cutnames<-gsub(" ", "_", cutnames)
+  cutnames<-gsub("/", "_", cutnames)
+  cutnames<-paste0(cutnames,".csv")
+  
+  write.csv(myclass_matrix, file=file.path(cleaned.geotiff.path,cutnames),  row.names=FALSE)
+
+  working_month<-as.numeric(temp_R_list$MONTH[t])
+  
+  ############################Be careful here ##################################
+  #SUBSET THE DATASET -- FINAL_w holds the metier in memory, be each tiff needs to be subset by month.
+  FINAL_wy=FINAL_W[which(FINAL_W$MONTH==working_month),]
+  shortlist<-c("IDNUM","PERMIT","LAT","LON")
+  FINAL_wyshort=unique(FINAL_wy[shortlist])
+  ############################Be careful here ##################################
+
+  source(file.path(project_root_path,"R_code/production_confidential_checker.R"))
+
+#########
+
+# Now set up to plot this GROUP of rasters, with the above-determined binning scheme
+
+  # Filename for 'RAW' plotted png
+  png_filename=paste0("raw_", temp_R_list$NAME[t], ".png")
+  rawPNG.file <- file.path(cleaned.image.path, png_filename)
+  
+  
+  my.month<-temp_R_list$MONTH[t]
+  my.month[which(my.month==0)]<-"N/A"
+  my.month<-paste0("Month=",my.month)
+  
+  #my.gear<-paste0("Gear=",temp_R_list$GEAR[t])
+  
+  
+  
+  
+  # Filename for RECLASSIFIED plotted map png
+      reclass_filename=paste0("reclass_", temp_R_list$NAME[t], ".png")
+      reclassPNG.file <- file.path(cleaned.image.path, reclass_filename)
+      
+      # Create a graphical object of text
+
+      our.max.pixels = 8e8 # This is slightly larger than the number of cells in the baseraster (the max number of cells possible)
+      
+      jcons<-levelplot(myras, 
+                       raster=TRUE,
+                       #aspect="xy",
+                       maxpixels=our.max.pixels,
+                       margin=FALSE, 
+                       #main=title_opts1,                  
+                       par.setting=mycoloropts, scales=myscaleopts, at=mybreaks_class1, 
+                       xlim=extreme.xlimit,ylim=extreme.ylimit, 
+                       colorkey=myckey 
+                      )
+# OUTPUT  for the RAW raster 
+      png(file=rawPNG.file, width=png.width, height=png.height, units="px"
+          , bg="white")
+      
+      
+      
+      print(jcons+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
+            + layer(sp.lines(NLS_grnd))+ layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
+            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            
+      )
+      
+      # print(jcons 
+      #       + layer(sp.polygons(my_basemap2,fill=mylandfill))
+      #       + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
+            #+ layer(grid.draw(gr.text))
+     # )
+      dev.off()
+##################################      
+      end.time <- Sys.time()
+      #print(paste0("REVENUE rasters were built in ", round((end.time - start.time), digits=2), " minutes."))
+      
+##### 
+      #reclass_gtiff_name<-gsub(".png", ".tif", reclass_filename) 
+      reclass_gtiff_name<-gsub(".png", ".tif", reclass_filename) 
+      #store the reclassified raster.
+      writeRaster(myr2, file.path(cleaned.geotiff.path,reclass_gtiff_name), format="GTiff", overwrite=T)
+      
+      our.max.pixels = 550000 #8e6 # This is slightly larger than the number of cells in the baseraster (the max number of cells possible)
+      
+      mylegend<-floor(mybreaks_class1)
+      #sub in the true largest value 
+      mylegend[length(mylegend)]<-glob_max
+      myckey2<-list(at=seq(0, length(mylegend)-1, 1), labels=list(at=seq(0,length(mylegend)-1,1),labels=mylegend, cex=2))
+      
+      rclassed<-levelplot(myr2,  
+                            #raster=TRUE,
+                            #aspect="xy",
+                            maxpixels=our.max.pixels,
+                            margin=FALSE,
+                            col.regions=brewer.friendly.bupu,scales=myscaleopts,
+                            at=seq(0, length(mylegend)-1, 1),
+                            xlim=extreme.xlimit,ylim=extreme.ylimit,
+                            colorkey=myckey2
+                            )
+      
+      png(file=reclassPNG.file, width=png.width, height=png.height, units="px"
+          , bg="white")
+      
+      print(rclassed+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
+            + layer(sp.lines(NLS_grnd))+ layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
+            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            
+      )
+      #print(rclassed
+       #     + layer(sp.polygons(my_basemap2,fill=mylandfill))
+        #    + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
+            #+ layer(grid.draw(gr.text))
+      #)
+      dev.off()
+      
+###     
+      print(paste0("You just made the ",reclass_gtiff_name, " image" ))
+      
+    }  
+    # END loop plotting REVENUE rasters
+##############
+    R.end.time <- Sys.time()
+} # End error-catch for R list < 5 rows
+
+    print(paste0("Started at ", (R.start.time)," and ended at ", R.end.time, ". Total time: ", (R.end.time - R.start.time)))
+    print("------------------")
+################################
+### Ends where the rasters are individually plotted
+  } 
+
+# Ends whole loop!
+end.time.total <- Sys.time()
+end.time.total-start.time.total
+
+############################
+####
+csv_out<-file.path(cleaned.geotiff.path,"parsed_groups.csv")
+write.csv(parsed_groups, csv_out)
+
+#store these paths to make the including images a little easier.
+cleaned.geotiff.path2<-cleaned.geotiff.path
+cleaned.image.path2<-cleaned.image.path
+  
+
+```	
+<!-- Begim section to construct and map aggregated rasters for revenue on trips that retain herring -->
+
+<!-- Note: The HULLNUM/VESID variable is not used in this dataset to fill in the permit number for clam trips (which don't have a permit attached to the record in the SFCLAM database). This will introduce NA's to the data. -->
+
+
+
+<br>
+
+
+
+# Maps of Selected Fishery Landings and Revenue  
+
+
+```{r map_of_area, results='asis', eval = T} 
+
+if (proj_area_name %in% formatted_lease_area_table$proj_area_file_name | shapefile_path != "") {
+print(lease_area_map)
+}
+
+```
+
+<br>
+
+<br>
+
+## Data sources:  
+Commerical Fisheries landings data, Vessel Trip Reports, and Surfclam/OceanQuahog Logbooks
+
+<br>
+
+</center>
+## Caveats and notes:
+
+* Values are reported in nominal dollars.
+* Pounds are reported in landed (dressed) pounds.
+* Data summarized here is based on vessels that are required to provide federal VTRs.
+* Federal lobster vessels, with only lobster permits, do not have a VTR requirement. Many Atlantic Highly Migratory Species permitted vessels also do not have a VTR requirement. Trips with no VTR are not reflected in this summary.
+* There exist other fisheries in State waters that may not be reflected in data from federal sources (e.g. whelk, bluefish). It is recommended to query state agencies for additional data within state waters.
+* All summaries presented here are built from percentages of a trip that overlapped spatially with the WEAs. These percentages were applied to landings and values for that trip and summed. This differs from simply using the self-reported VTR/clam logbook locations as those place all value from that trip at a single point. Use of the VTR raster model is more representative as smoothing reported locations reduces the effect of location inaccuracy.
+
+
+
+# Maps of Selected Fishery Landings and Revenue  
+
+
+
+# Herring Landings
+<!-- 
+cleaned.geotiff.path1<-cleaned.geotiff.path
+cleaned.image.path1<-cleaned.image.path
+-->
+
+
+# Revenue on Trips that Land Herring
+
+```{r herring_landings, fig.show = "hold", out.width = "48%", fig.cap="\\label{herring_only} Herring Landings",  fig.align = "center", echo=FALSE}
+
+cleaned.image.path1<-"//net//home2/mlee/READ-SSB-Lee-Raster_requests/images/Herring/Framework7/herring-only_2021-03-17/PII_aggregated"
+months<-c("9","10","11")
+knitr::include_graphics(file.path(cleaned.image.path1,paste0("reclass_herring-only_QTYKEPT_month_",months,".png")))
+```
+
+
+
+```{r rev_on_herring_trips, fig.show = "hold", out.width = "48%", fig.cap="\\label{rev} Revenue on Trips that landed Herring",  fig.align = "center", echo=FALSE}
+cleaned.image.path2<-"//net//home2/mlee/READ-SSB-Lee-Raster_requests/images/Herring/Framework7/allrev-trips-catch168_2021-03-17/PII_aggregated"
+
+months<-c("9","10","11")
+knitr::include_graphics(file.path(cleaned.image.path2,paste0("reclass_allrev-trips-catch168_REVENUE_month_",months,".png")))
+```
+
+
+
+## References  
+[DePiper GS (2014) Statistically assessing the precision of self-reported VTR fishing locations.](https://repository.library.noaa.gov/view/noaa/4806)  
+[Benjamin S, Lee MY, DePiper G. 2018. Visualizing fishing data as rasters. NEFSC Ref Doc 18-12; 24 p.](https://repository.library.noaa.gov/view/noaa/23030)
+
