@@ -65,7 +65,7 @@ desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
 #############################################################################
 # versioning options
 todaysdate <- as.Date(Sys.time())
-todaysdate<-"2021-03-17"
+#todaysdate<-"2021-03-17"
 #############################################################################
 # Paths, names, and locations of inputs and outputs
 offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
