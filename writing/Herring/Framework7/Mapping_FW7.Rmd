@@ -123,7 +123,7 @@ num_jenks_subs=5000 # Maybe this should be higher; set to 1000 for the map produ
 
 # Here we exclude all cells <=1. (Later we deal with rasters with so few cells above the lower bound value,
     # that we change the sample size to match the number of cells with those values.)
-jenks.lowerbound=1
+jenks.lowerbound=1/rescale_factor
 
 # Min and Max x and y values set to standardize plot extent # the plot extent is set, but then adjusted based on the location of points in the plotted region
 my.ylimit=c(250000,850000)
@@ -1646,11 +1646,11 @@ if (nrow(confid_prob)>=1){
 rm(tsA)
 ```	
 
-```{r makegeotiffs1, include=FALSE, eval=FALSE}  
+```{r makegeotiffs1, include=FALSE, eval=TRUE}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 ```	
 
-```{r secondary_aggregation, include=FALSE, eval=FALSE} 
+```{r secondary_aggregation, include=FALSE, eval=TRUE} 
 
 #################################################
 # STEP 3 -- Set your mapping options
@@ -1754,7 +1754,7 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 
 ```	
 
-```{r check_confidential_secondary_aggregation, include=FALSE, eval=FALSE} 
+```{r check_confidential_secondary_aggregation, include=FALSE, eval=TRUE} 
 #file path with geotiffs that you need to check for confidentiality
 in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
 
@@ -2168,12 +2168,12 @@ if (nrow(confid_prob)>=1){
 }
 ```	
 
-```{r makegeotiffs2, include=FALSE, eval=FALSE}  
+```{r makegeotiffs2, include=FALSE, eval=TRUE}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 
 ```	
 
-```{r secondary_aggregation_part2, include=FALSE, eval=FALSE} 
+```{r secondary_aggregation_part2, include=FALSE, eval=TRUE} 
 
 
 #################################################
@@ -2280,7 +2280,7 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 ```	
 
 
-```{r check_confidential_secondary_aggregation2, include=FALSE, eval=FALSE} 
+```{r check_confidential_secondary_aggregation2, include=FALSE, eval=TRUE} 
 #file path with geotiffs that you need to check for confidentiality
 in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
 
