@@ -1650,7 +1650,7 @@ rm(tsA)
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 ```	
 
-```{r secondary_aggregation, include=FALSE, eval=TRUE} 
+```{r secondary_aggregation, include=FALSE, eval=FALSE} 
 
 #################################################
 # STEP 3 -- Set your mapping options
@@ -2173,7 +2173,7 @@ source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 
 ```	
 
-```{r secondary_aggregation_part2, include=FALSE, eval=TRUE} 
+```{r secondary_aggregation_part2, include=FALSE, eval=FALSE} 
 
 
 #################################################
@@ -2672,7 +2672,7 @@ Commerical Fisheries landings data, Vessel Trip Reports, and Surfclam/OceanQuaho
 * All summaries presented here are built from percentages of a trip that overlapped spatially with the WEAs. These percentages were applied to landings and values for that trip and summed. This differs from simply using the self-reported VTR/clam logbook locations as those place all value from that trip at a single point. Use of the VTR raster model is more representative as smoothing reported locations reduces the effect of location inaccuracy.
 
 
-
+\clearpage
 # Maps of Selected Fishery Landings and Revenue  
 
 
@@ -2682,9 +2682,8 @@ Commerical Fisheries landings data, Vessel Trip Reports, and Surfclam/OceanQuaho
 cleaned.geotiff.path1<-cleaned.geotiff.path
 cleaned.image.path1<-cleaned.image.path
 -->
+This set of maps (Figure \ref{herring_only}) contains herring pounds per square kilometer, summed over the entire 2010 to 2019 time period.  Features with less than 3 contributing permits have been anonymized.  We also set the value of any cells with less than 1 lb/square km to zero.
 
-
-# Revenue on Trips that Land Herring
 
 ```{r herring_landings, fig.show = "hold", out.width = "48%", fig.cap="\\label{herring_only} Herring Landings",  fig.align = "center", echo=FALSE}
 
@@ -2693,6 +2692,13 @@ months<-c("9","10","11")
 knitr::include_graphics(file.path(cleaned.image.path1,paste0("reclass_herring-only_QTYKEPT_month_",months,".png")))
 ```
 
+\clearpage
+
+
+# Revenue on Trips that Land Herring
+This set of maps  (Figure \ref{rev})  contains nominal revenue (dollars per square kilometer) for trips that landed at least 1 pound of herring, summed over the entire 2010 to 2019 time period.  Features with less than 3 contributing permits have been anonymized.  We also set the value of any cells with less than /$1 per square km to zero.  
+
+The difference between this set of maps and the previous is somewhat surprising.  I think there are lots of trips that are encountering a very small amount of herring and getting substantial review from other species in the Mid Atlantic in the Winter.  So this might not really be informative about the "directed" herring fishery.
 
 
 ```{r rev_on_herring_trips, fig.show = "hold", out.width = "48%", fig.cap="\\label{rev} Revenue on Trips that landed Herring",  fig.align = "center", echo=FALSE}
