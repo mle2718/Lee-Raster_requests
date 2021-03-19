@@ -1605,7 +1605,7 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
 
 
 Descriptions of Selected Fishery Landings and Estimates of Vessel Revenue from Areas: A Planning-level Assessment 
-NOTE: These data used to construct these figures have NOT been filtered to the months under consideration.
+NOTE: These data used to construct these figures have been filtered to the months under consideration (Sept, Oct, Nov).
 
 <br>
 
