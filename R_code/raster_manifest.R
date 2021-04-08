@@ -35,17 +35,21 @@ message("Done.")
   # set local/changable variables
   # TODO: use flat files on desktop computer to save time and change things for Windows instead of Linux
   message("Compiling list of rasters ..")
-  filelist = lapply(as.list(list.dirs(path=raster_folder, recursive=F)), list.files, recursive=T, full.names=T, pattern="*.gri")
-
+  #filelist = lapply(as.list(list.dirs(path=raster_folder, recursive=F)), list.files, recursive=T, full.names=T, pattern="*.gri")
+  filelist = list.files(raster_folder, recursive=T, full.names=T, pattern="*.gri")
+  
   message("Finished.")
   # Create one single-column dataframe with all elements in form of the filepath, but R recgonizes it only as text
-  # Dataframe with ~1.8 million records (comercial only)
+  # Dataframe with ~2.5 million records (commercial only)
   message("Compiling filepaths of rasters ..")
   #The following create new dataframe fields for IDnum and year..
-  fl = do.call(rbind, lapply(filelist, function(xx) {
-    xx = as.data.frame(xx, stringsAsFactors=F)
-    names(xx) = "FILEPATH"
-    return(xx) }) )
+  
+  fl<-as.data.frame(filelist)
+  
+  #fl = do.call(rbind, lapply(filelist, function(xx) {
+  # xx = as.data.frame(xx, stringsAsFactors=F)
+  #  names(xx) = "FILEPATH"
+  #  return(xx) }) )
 
   #fl = paste(sd,"individualrasters","MA","2013","70766.grd",sep="/")
   #fl = as.data.frame(fl)
