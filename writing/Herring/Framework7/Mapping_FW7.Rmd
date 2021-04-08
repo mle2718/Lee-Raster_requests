@@ -20,7 +20,7 @@ compact-title: FALSE
 This is the markdown document used to make raster maps for Herring FW7.  It uses the offshoreWind package
 -->
 
-```{r global_options, include=FALSE}
+```{r global_options, include=TRUE}
 
 # ### install offshoreWind package from Github if needed
 if(!require(offshoreWind)) {
@@ -31,7 +31,7 @@ if(!require(offshoreWind)) {
   require(offshoreWind)}
 
 PKG <- c("foreign", "data.table", "dichromat", "RColorBrewer", "lattice", "scales",  "openxlsx", "sp", "rgdal", "raster","snowfall",
-         "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4","rasterVis","classInt", "rgeos")
+         "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4","rasterVis","classInt", "rgeos","tinytex")
 for (p in PKG) {
   if(!require(p,character.only = TRUE)) {
     install.packages(p)
@@ -44,7 +44,6 @@ knitr::opts_chunk$set(echo=FALSE, warning = FALSE, error = FALSE, message = FALS
 											dpi = 600)
 options(tinytex.verbose = TRUE)
 # options(knitr.table.format = "latex")
-
 # knit: (function(inputFile, encoding) { rmarkdown::render(inputFile, encoding = encoding, output_file = file.path(dirname(inputFile), 'myfile.pdf')) })
 #############################################################################
 
@@ -73,8 +72,10 @@ project_root_path<-file.path(network_location,"home2","mlee","READ-SSB-Lee-Raste
 wind_area_hard_name = "Herring Framework 7"
 
 raster_manifest_location<-file.path(project_root_path,"raw_data")
-individual.raster.file="raster_manifest_2021-03-15.Rds"
+#individual.raster.file="raster_manifest_2021-03-15.Rds"
+individual.raster.file="raster_manifest_2021-04-08.Rds"
 payloadRDS=file.path(raster_manifest_location,individual.raster.file)
+
 
 root.geotiff.path<-file.path(project_root_path,"geotiffs","Herring","Framework7")
 root.image.path = file.path(project_root_path,"images","Herring","Framework7")
@@ -195,7 +196,7 @@ getCallAreaEffort(raster_folder =
 
 
 ```{r construct raster manifest, eval = F}  
-source(file.path(project_root_path,"R_code/raster_manifest.R")
+source(file.path(project_root_path,"R_code/raster_manifest.R"))
 ```
 
 
@@ -235,7 +236,7 @@ basemap_eastcoast = readOGR(dsn=file.path(ML.GIS.PATH,"basic spatial data","more
 basemap_eastcoast = spTransform(basemap_eastcoast, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
 
 # EEZ Shapefiles
-basemap_EEZ = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "corrected_stat_areas"), layer="EEZ", verbose=F)
+basemap_EEZ = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "corrected_stat_areas","EEZ"), layer="EEZ", verbose=F)
 basemap_EEZ = spTransform(basemap_EEZ, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
 
 # Herring Management areas
@@ -244,14 +245,14 @@ basemap_herringHMA = spTransform(basemap_herringHMA, CRS=PROJ.USE)
 
 
 #Multispecies Closed Areas CAI, CAII, NLS)
-CAI_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_ca1", verbose=F)
+CAI_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","multispecies closed areas"), layer="mults_ca1", verbose=F)
 CAI_grnd = spTransform(CAI_grnd, CRS=PROJ.USE)
 CAI_grnd = CAI_grnd[CAI_grnd$id==2,]
 
-CAII_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_ca2", verbose=F)
+CAII_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","multispecies closed areas"), layer="mults_ca2", verbose=F)
 CAII_grnd = spTransform(CAII_grnd, CRS=PROJ.USE)
 
-NLS_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_nls", verbose=F)
+NLS_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","multispecies closed areas"), layer="mults_nls", verbose=F)
 NLS_grnd = spTransform(NLS_grnd, CRS=PROJ.USE)
 
 Closedgf_04_15 = gUnion(CAI_grnd[CAI_grnd$id==2,],CAII_grnd)
@@ -1575,10 +1576,9 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
 
 <!-- Begin section to construct and map aggregated rasters for herring pounds only -->
 
-```{r prep_geotiffs1, include=FALSE, eval=TRUE}  
+```{r prep_geotiffs1, include=FALSE, eval=FALSE}  
 # Read in the file attributes of the individual rasters.
 fl<-readRDS(payloadRDS)
-
 
 #I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
 
@@ -1590,6 +1590,7 @@ MARGIN = c("MY_MARGIN") #Like "SPPNM","NESPP3","GEARCAT","FMP","STATE1". Comment
 #Give the files and folders a pretty name.
 readable_name ="herring-only"
 
+#Retain the rows that have herring (168) and at least 1 lb QTYKEPT
 logical_subset<-quote(which(FINALstack$NESPP3 %in% c(168) &FINALstack[[FIELD]]>=1)) 
 my_margin_name<-quote(paste(FINALstack$MONTH,readable_name, sep="_"))
 
@@ -1637,20 +1638,32 @@ tsA$readable_name<-readable_name
 
 tsA<-tsA[c("readable_name","FULL_MARGIN","Year","MONTH","unique_permits","unique_trips","total")]
 
+
 write.csv(tsA,file=file.path(export.geotiff.path,paste(readable_name,"summary_stats.csv")), row.names=FALSE)
 
 confid_prob<-tsA[(which(tsA$unique_permits<=2)),]
 if (nrow(confid_prob)>=1){
   write.csv(confid_prob,file=file.path(export.geotiff.path,paste(readable_name,"confidential.csv")), row.names=FALSE)
 }
+
+
+#groupwise statistics
+ts<-tsA %>% 
+  group_by(readable_name,MONTH) %>%
+  summarize(
+      total=sum(total)
+         )
+
+
+
 rm(tsA)
 ```	
 
-```{r makegeotiffs1, include=FALSE, eval=TRUE}  
+```{r makegeotiffs1, include=FALSE, eval=FALSE}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 ```	
 
-```{r secondary_aggregation, include=FALSE, eval=TRUE} 
+```{r secondary_aggregation, include=FALSE, eval=FALSE} 
 
 #################################################
 # STEP 3 -- Set your mapping options
@@ -1672,7 +1685,12 @@ dir.create(out.geotiff.path, showWarnings = FALSE, recursive=TRUE)
 ###### This script will sum together various geotiffs
 
 ######This bit of code gets run over and over and could easily be a separate function or just an Rscript.###################
-list1<- lapply(as.list(list.dirs(path=geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=mypat1)
+
+#Only get the files in geotiff.path and not in any subfolders
+list1<- list.files(path=geotiff.path, recursive=F, full.names=T, pattern=mypat1)
+
+
+#list1<- lapply(as.list(list.dirs(path=geotiff.path, recursive=F)), list.files, recursive=T, full.names=T, pattern=mypat1)
 parsed_list1 = do.call(rbind, lapply(list1, function(xx) {
   xx = as.data.frame(xx, stringsAsFactors=F)
   names(xx) = "FILENAME" 
@@ -1754,7 +1772,7 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 
 ```	
 
-```{r check_confidential_secondary_aggregation, include=FALSE, eval=TRUE} 
+```{r check_confidential_secondary_aggregation, include=FALSE, eval=FALSE} 
 #file path with geotiffs that you need to check for confidentiality
 in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
 
@@ -1791,7 +1809,10 @@ start.time.total<-R.start.time
 # List all the rasters in "FINAL MAPS" (below) .... and parse their filenames out into FILEPATH, NAME, and UNIT (further down)
 tif_pat<-glob2rx("*.tif")
 
-rasterlist<- lapply(as.list(list.dirs(path=in.geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=tif_pat)
+#don't go into subfolders
+rasterlist<- list.files(path=in.geotiff.path, recursive=F, full.names=T, pattern=tif_pat)
+
+#rasterlist<- lapply(as.list(list.dirs(path=in.geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=tif_pat)
 
 ##############################
 
@@ -2101,7 +2122,7 @@ cleaned.image.path1<-cleaned.image.path
 
 <!-- Begim section to construct and map aggregated rasters for revenue on trips that retain herring -->
 
-```{r prep_geotiffs2, include=FALSE,eval=TRUE}   
+```{r prep_geotiffs2, include=FALSE,eval=FALSE}   
 # Read in the file attributes of the individual rasters.
 
 #I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
@@ -2168,12 +2189,12 @@ if (nrow(confid_prob)>=1){
 }
 ```	
 
-```{r makegeotiffs2, include=FALSE, eval=TRUE}  
+```{r makegeotiffs2, include=FALSE, eval=FALSE}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 
 ```	
 
-```{r secondary_aggregation_part2, include=FALSE, eval=TRUE} 
+```{r secondary_aggregation_part2, include=FALSE, eval=FALSE} 
 
 
 #################################################
@@ -2195,9 +2216,10 @@ dir.create(out.geotiff.path, showWarnings = FALSE, recursive=TRUE)
 #################################################
 #################################################################################
 ###### This script will sum together various geotiffs
+#Only get the files in geotiff.path and not in any subfolders
 
 
-list1<- lapply(as.list(list.dirs(path=geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=mypat1)
+list1<- list.files(path=geotiff.path, recursive=F, full.names=T, pattern=mypat1)
 parsed_list1 = do.call(rbind, lapply(list1, function(xx) {
   xx = as.data.frame(xx, stringsAsFactors=F)
   names(xx) = "FILENAME" 
@@ -2280,7 +2302,7 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 ```	
 
 
-```{r check_confidential_secondary_aggregation2, include=FALSE, eval=TRUE} 
+```{r check_confidential_secondary_aggregation2, include=FALSE, eval=FALSE} 
 #file path with geotiffs that you need to check for confidentiality
 in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
 
@@ -2317,7 +2339,9 @@ start.time.total<-R.start.time
 # List all the rasters in "FINAL MAPS" (below) .... and parse their filenames out into FILEPATH, NAME, and UNIT (further down)
 tif_pat<-glob2rx("*.tif")
 
-rasterlist<- lapply(as.list(list.dirs(path=in.geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=tif_pat)
+rasterlist<- list.files(path=in.geotiff.path, recursive=F, full.names=T, pattern=tif_pat)
+
+#rasterlist<- lapply(as.list(list.dirs(path=in.geotiff.path, recursive=T)), list.files, recursive=F, full.names=T, pattern=tif_pat)
 
 ##############################
 
@@ -2687,7 +2711,7 @@ This set of maps (Figure \ref{herring_only}) contains herring pounds per square 
 
 ```{r herring_landings, fig.show = "hold", out.width = "48%", fig.cap="\\label{herring_only} Herring Landings",  fig.align = "center", echo=FALSE}
 
-cleaned.image.path1<-"//net//home2/mlee/READ-SSB-Lee-Raster_requests/images/Herring/Framework7/herring-only_2021-03-17/PII_aggregated"
+cleaned.image.path1<-"//net//home2/mlee/READ-SSB-Lee-Raster_requests/images/Herring/Framework7/herring-only_2021-04-08/PII_aggregated"
 months<-c("9","10","11")
 knitr::include_graphics(file.path(cleaned.image.path1,paste0("reclass_herring-only_QTYKEPT_month_",months,".png")))
 ```
@@ -2702,7 +2726,7 @@ The difference between this set of maps and the previous is somewhat surprising.
 
 
 ```{r rev_on_herring_trips, fig.show = "hold", out.width = "48%", fig.cap="\\label{rev} Revenue on Trips that landed Herring",  fig.align = "center", echo=FALSE}
-cleaned.image.path2<-"//net//home2/mlee/READ-SSB-Lee-Raster_requests/images/Herring/Framework7/allrev-trips-catch168_2021-03-17/PII_aggregated"
+cleaned.image.path2<-"//net//home2/mlee/READ-SSB-Lee-Raster_requests/images/Herring/Framework7/allrev-trips-catch168_2021-04-08/PII_aggregated"
 
 months<-c("9","10","11")
 knitr::include_graphics(file.path(cleaned.image.path2,paste0("reclass_allrev-trips-catch168_REVENUE_month_",months,".png")))
