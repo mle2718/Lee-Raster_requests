@@ -63,5 +63,7 @@ message("Done.")
     return(temp[(NCOL(temp)-1)]) })
 
   saveRDS(fl, file = file.path(output_f,paste0("raster_manifest_",todaysdate,".Rds")))
-message("Finished.")
+  
+  table(fl$YEAR)
+message("Finished. ")
 
