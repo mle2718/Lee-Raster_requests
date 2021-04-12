@@ -20,7 +20,7 @@ compact-title: FALSE
 This is the markdown document used to make raster maps for Herring FW7.  It uses the offshoreWind package
 -->
 
-```{r global_options, include=TRUE}
+```{r global_options, include=FALSE}
 
 # ### install offshoreWind package from Github if needed
 if(!require(offshoreWind)) {
@@ -30,8 +30,7 @@ if(!require(offshoreWind)) {
   install_github("dcorvi/offshoreWind")
   require(offshoreWind)}
 
-PKG <- c("foreign", "data.table", "dichromat", "RColorBrewer", "lattice", "scales",  "openxlsx", "sp", "rgdal", "raster","snowfall",
-         "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4","rasterVis","classInt", "rgeos","tinytex")
+PKG <- c("foreign", "data.table", "dichromat", "RColorBrewer", "lattice", "scales",  "openxlsx", "sp", "rgdal", "raster","snowfall", "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4","rasterVis","classInt", "rgeos","tinytex")
 for (p in PKG) {
   if(!require(p,character.only = TRUE)) {
     install.packages(p)
@@ -63,8 +62,8 @@ desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
 
 #############################################################################
 # versioning options
-todaysdate <- as.Date(Sys.time())
-#todaysdate<-"2021-03-17"
+#todaysdate <- as.Date(Sys.time())
+todaysdate<-"2021-04-08"
 #############################################################################
 # Paths, names, and locations of inputs and outputs
 offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
@@ -183,7 +182,7 @@ myckey <- list(labels=list(cex=2)) # Set the size of color ramp labels (?)
 ```	
 
 
-```{r getcallArea, eval = F}  
+```{r getcallArea, include=FALSE, eval = F}  
 #Dennis ran this on March 11, 2021
 #Plopping this in here, so I know how to find it if I have to update
 getCallAreaEffort(raster_folder =
@@ -213,7 +212,7 @@ source(file.path(project_root_path,"R_code/raster_manifest.R"))
 
 ```
 
-```{r LOAD_EXISTING_GIS_DATA, eval=T}
+```{r LOAD_EXISTING_GIS_DATA, include=FALSE, eval=T}
 
 ##############################################
 ## SECTION 4 - LOAD EXISTING GIS DATA
@@ -848,7 +847,7 @@ VTR_REC <- VTR_REC %>% # fix data
 ```
 
 
-```{r load_VTR_REC_or_DMIS_flat_files_and_clean, eval = T}  
+```{r load_VTR_REC_or_DMIS_flat_files_and_clean, eval = TRUE}  
 # run this code chunk to query from Oracle or use in-package data - querying from Oracle takes longer but ensures that everything is up-to-date    
 # also renames and cleans DMIS variables and data   
  
@@ -1004,7 +1003,7 @@ FIN_backup <- FIN
 
 ```
 
-```{r process_permit_data, eval = T} 
+```{r process_permit_data, eval = TRUE} 
 # FIN <- FIN_backup # for resets
 
 QUERY_RESULT$YEAR_L <- NULL # remove year variable
@@ -2711,7 +2710,7 @@ This set of maps (Figure \ref{herring_only}) contains herring pounds per square 
 
 ```{r herring_landings, fig.show = "hold", out.width = "48%", fig.cap="\\label{herring_only} Herring Landings",  fig.align = "center", echo=FALSE}
 
-cleaned.image.path1<-"//net//home2/mlee/READ-SSB-Lee-Raster_requests/images/Herring/Framework7/herring-only_2021-04-08/PII_aggregated"
+cleaned.image.path1<-paste0("//net//home2/mlee/READ-SSB-Lee-Raster_requests/images/Herring/Framework7/","herring-only_",todaysdate,"/PII_aggregated")
 months<-c("9","10","11")
 knitr::include_graphics(file.path(cleaned.image.path1,paste0("reclass_herring-only_QTYKEPT_month_",months,".png")))
 ```
@@ -2726,7 +2725,7 @@ The difference between this set of maps and the previous is somewhat surprising.
 
 
 ```{r rev_on_herring_trips, fig.show = "hold", out.width = "48%", fig.cap="\\label{rev} Revenue on Trips that landed Herring",  fig.align = "center", echo=FALSE}
-cleaned.image.path2<-"//net//home2/mlee/READ-SSB-Lee-Raster_requests/images/Herring/Framework7/allrev-trips-catch168_2021-04-08/PII_aggregated"
+cleaned.image.path2<-paste0("//net//home2/mlee/READ-SSB-Lee-Raster_requests/images/Herring/Framework7/","allrev-trips-catch168_",todaysdate,"/PII_aggregated")
 
 months<-c("9","10","11")
 knitr::include_graphics(file.path(cleaned.image.path2,paste0("reclass_allrev-trips-catch168_REVENUE_month_",months,".png")))
