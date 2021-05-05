@@ -62,7 +62,7 @@ desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
 
 #############################################################################
 # versioning options
-#todaysdate <- as.Date(Sys.time())
+#todaysdate <- Sys.Date()
 todaysdate<-"2021-04-08"
 #############################################################################
 # Paths, names, and locations of inputs and outputs
