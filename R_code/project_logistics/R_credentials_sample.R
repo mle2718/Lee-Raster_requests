@@ -4,6 +4,7 @@ solepw<-"<yoursole_pwd>"
 novapw<-"<yournova_pwd"
 
 
+# Assemble connection to SOLE
 
 drv<-dbDriver("Oracle")
 shost <- "<sole.full.path.to.server.gov>"
@@ -17,6 +18,7 @@ sole.connect.string<-paste(
 sole_conn<-dbConnect(drv, id, password=solepw, dbname=sole.connect.string)
 
 
+# Assemble connection to NOVA
 
 nhost <- "nova.full.path.to.server.gov"
 port <- port_number_here
@@ -27,3 +29,7 @@ nova.connect.string<-paste(
   "(ADDRESS=(PROTOCOL=tcp)(HOST=", nhost, ")(PORT=", port, "))",
   "(CONNECT_DATA=(SID=", ssid2, ")))", sep="")
 nova_conn<-dbConnect(drv, id, password=novapw, dbname=nova.connect.string)
+
+# IPs or paths to the network drives
+network_location_desktop = "//999.999.999.9/"
+network_location_server = "//net/"
