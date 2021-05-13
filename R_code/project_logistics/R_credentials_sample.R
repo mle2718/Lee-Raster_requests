@@ -1,7 +1,7 @@
 
 id<-"<yourid>"
 solepw<-"<yoursole_pwd>"
-novapw<-"<yournova_pwd"
+novapw<-"<yournova_pwd>"
 
 
 # Assemble connection to SOLE
