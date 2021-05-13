@@ -4,7 +4,7 @@ solepw<-"<yoursole_pwd>"
 novapw<-"<yournova_pwd>"
 
 # This sets things up to connect to databases using ROracle
-# Assemble connection to SOLE
+# Assemble ROracle connection to SOLE
 
 drv<-dbDriver("Oracle")
 shost <- "<sole.full.path.to.server.gov>"
@@ -18,7 +18,7 @@ sole.connect.string<-paste(
 sole_conn<-dbConnect(drv, id, password=solepw, dbname=sole.connect.string)
 
 
-# Assemble connection to NOVA
+# Assemble ROracle connection to NOVA
 
 nhost <- "nova.full.path.to.server.gov"
 port <- port_number_here
