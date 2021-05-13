@@ -3,7 +3,7 @@ id<-"<yourid>"
 solepw<-"<yoursole_pwd>"
 novapw<-"<yournova_pwd>"
 
-
+# This sets things up to connect to databases using ROracle
 # Assemble connection to SOLE
 
 drv<-dbDriver("Oracle")
