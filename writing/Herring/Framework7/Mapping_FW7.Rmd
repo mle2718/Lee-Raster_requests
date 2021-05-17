@@ -21,6 +21,9 @@ This is the markdown document used to make raster maps for Herring FW7.  It uses
 -->
 
 ```{r global_options, include=FALSE}
+# A switch to run or not run some of the confidentiality code.  Set to true to run the confidentiality checker and mapping. Set to False to skip this lengthy step
+eval_switch<-TRUE
+eval_switch<-FALSE
 
 # ### install offshoreWind package from Github if needed
 if(!require(offshoreWind)) {
@@ -1583,7 +1586,7 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
 
 <!-- Begin section to construct and map aggregated rasters for herring pounds only -->
 
-```{r prep_geotiffs1, include=FALSE, eval=FALSE}  
+```{r prep_geotiffs1, include=FALSE, eval=eval_switch}  
 # Read in the file attributes of the individual rasters.
 fl<-readRDS(payloadRDS)
 
@@ -1666,11 +1669,11 @@ ts<-tsA %>%
 rm(tsA)
 ```	
 
-```{r makegeotiffs1, include=FALSE, eval=FALSE}  
+```{r makegeotiffs1, include=FALSE, eval=eval_switch}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 ```	
 
-```{r secondary_aggregation, include=FALSE, eval=FALSE} 
+```{r secondary_aggregation, include=FALSE, eval=eval_switch} 
 
 #################################################
 # STEP 3 -- Set your mapping options
@@ -1779,7 +1782,7 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 
 ```	
 
-```{r check_confidential_secondary_aggregation, include=FALSE, eval=FALSE} 
+```{r check_confidential_secondary_aggregation, include=FALSE, eval=eval_switch} 
 #file path with geotiffs that you need to check for confidentiality
 in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
 
@@ -2129,7 +2132,7 @@ cleaned.image.path1<-cleaned.image.path
 
 <!-- Begim section to construct and map aggregated rasters for revenue on trips that retain herring -->
 
-```{r prep_geotiffs2, include=FALSE,eval=FALSE}   
+```{r prep_geotiffs2, include=FALSE,eval=eval_switch}   
 # Read in the file attributes of the individual rasters.
 
 #I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
@@ -2196,12 +2199,12 @@ if (nrow(confid_prob)>=1){
 }
 ```	
 
-```{r makegeotiffs2, include=FALSE, eval=FALSE}  
+```{r makegeotiffs2, include=FALSE, eval=eval_switch}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 
 ```	
 
-```{r secondary_aggregation_part2, include=FALSE, eval=FALSE} 
+```{r secondary_aggregation_part2, include=FALSE, eval=eval_switch} 
 
 
 #################################################
@@ -2309,7 +2312,7 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 ```	
 
 
-```{r check_confidential_secondary_aggregation2, include=FALSE, eval=FALSE} 
+```{r check_confidential_secondary_aggregation2, include=FALSE, eval=eval_switch} 
 #file path with geotiffs that you need to check for confidentiality
 in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
 
