@@ -227,6 +227,7 @@ source(file.path(project_root_path,"R_code/raster_manifest.R")
 #################################################
 
 
+
 # STATISTICAL AREAS
 my_basemap1 = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data","corrected_stat_areas"), layer="Statistical_Areas", verbose=F)
 my_basemap1 = spTransform(my_basemap1, CRS=PROJ.USE)# Don't project if you're plotting in a lat/lon, not-projected CRS
@@ -243,7 +244,7 @@ basemap_eastcoast = readOGR(dsn=file.path(ML.GIS.PATH,"basic spatial data","more
 basemap_eastcoast = spTransform(basemap_eastcoast, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
 
 # EEZ Shapefiles
-basemap_EEZ = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "corrected_stat_areas"), layer="EEZ", verbose=F)
+basemap_EEZ = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "USEEZ"), layer="useez", verbose=F)
 basemap_EEZ = spTransform(basemap_EEZ, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
 
 # Herring Management areas
@@ -252,18 +253,19 @@ basemap_herringHMA = spTransform(basemap_herringHMA, CRS=PROJ.USE)
 
 
 #Multispecies Closed Areas CAI, CAII, NLS)
-CAI_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_ca1", verbose=F)
+CAI_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","multispecies closed areas"), layer="mults_ca1", verbose=F)
 CAI_grnd = spTransform(CAI_grnd, CRS=PROJ.USE)
 CAI_grnd = CAI_grnd[CAI_grnd$id==2,]
 
-CAII_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_ca2", verbose=F)
+CAII_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","multispecies closed areas"), layer="mults_ca2", verbose=F)
 CAII_grnd = spTransform(CAII_grnd, CRS=PROJ.USE)
 
-NLS_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","mults closed areas"), layer="mults_nls", verbose=F)
+NLS_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","multispecies closed areas"), layer="mults_nls", verbose=F)
 NLS_grnd = spTransform(NLS_grnd, CRS=PROJ.USE)
 
 Closedgf_04_15 = gUnion(CAI_grnd[CAI_grnd$id==2,],CAII_grnd)
 Closedgf_04_15 = gUnion(Closedgf_04_15,NLS_grnd)
+
 
 
 

@@ -225,6 +225,7 @@ source(file.path(project_root_path,"R_code/raster_manifest.R"))
 #################################################
 
 
+
 # STATISTICAL AREAS
 my_basemap1 = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data","corrected_stat_areas"), layer="Statistical_Areas", verbose=F)
 my_basemap1 = spTransform(my_basemap1, CRS=PROJ.USE)# Don't project if you're plotting in a lat/lon, not-projected CRS
@@ -241,7 +242,7 @@ basemap_eastcoast = readOGR(dsn=file.path(ML.GIS.PATH,"basic spatial data","more
 basemap_eastcoast = spTransform(basemap_eastcoast, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
 
 # EEZ Shapefiles
-basemap_EEZ = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "corrected_stat_areas","EEZ"), layer="EEZ", verbose=F)
+basemap_EEZ = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "USEEZ"), layer="useez", verbose=F)
 basemap_EEZ = spTransform(basemap_EEZ, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
 
 # Herring Management areas
@@ -262,6 +263,7 @@ NLS_grnd = spTransform(NLS_grnd, CRS=PROJ.USE)
 
 Closedgf_04_15 = gUnion(CAI_grnd[CAI_grnd$id==2,],CAII_grnd)
 Closedgf_04_15 = gUnion(Closedgf_04_15,NLS_grnd)
+
 
 
 
