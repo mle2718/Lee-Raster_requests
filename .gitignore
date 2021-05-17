@@ -7,3 +7,7 @@
 /geotiffs/*
 /images/*
 /tables/*
+*.aux
+*.docx
+*.doc
+R_credentials.R
