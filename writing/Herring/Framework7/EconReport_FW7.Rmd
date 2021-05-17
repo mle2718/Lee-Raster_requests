@@ -54,12 +54,18 @@ options(tinytex.verbose = TRUE)
 # Different setups based on whether you are using Windows or Not-windows
 desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
 
+
+# We have set network_location_desktop and network_location_remove in  .Rprofile
   if (desktopUse) { # set the root path of the network, based on whether on desktop or server
-    network_location = "//155.206.139.2/"
+    network_location = network_location_desktop
     system("ipconfig", intern = TRUE)
   } else {
-    network_location = "//net/"
+    network_location = network_location_remote
   }
+
+
+
+
 #############################################################################
 
 #############################################################################
