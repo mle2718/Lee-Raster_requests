@@ -5,13 +5,13 @@ todaysdate = as.Date(Sys.time())
 desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
 
 if (desktopUse) { # set the root path of the network, based on whether on desktop or server
-  network_location = "//155.206.139.2/"
+  network_location = network_location_desktop
   system("ipconfig", intern = TRUE)
 } else {
-  network_location = "//net/"
+  network_location = network_location_remote
 }
 raster_folder = file.path(network_location,"work5/socialsci/Geret_Rasters/Data/individualrasters")
-output_f = file.path(network_location,"/home2/mlee/READ-SSB-Lee-Raster_requests/raw_data")
+output_f = file.path(network_location,"home2/mlee/READ-SSB-Lee-Raster_requests/raw_data")
 
 message("Creating output folder if it doesnt exist..")
 dir.create(file.path(output_f), showWarnings=T)
@@ -32,24 +32,29 @@ message("Done.")
 
 
 
-  # set local/changable variables
-  # TODO: use flat files on desktop computer to save time and change things for Windows instead of Linux
+#For some reason, this construction doesn't pick up all the rasters.
+#filelist = list.files(raster_folder, recursive=T, full.names=T, pattern="*.gri")
+#fl<-as.data.frame(filelist)
+
+
+
   message("Compiling list of rasters ..")
-  #filelist = lapply(as.list(list.dirs(path=raster_folder, recursive=F)), list.files, recursive=T, full.names=T, pattern="*.gri")
-  filelist = list.files(raster_folder, recursive=T, full.names=T, pattern="*.gri")
+  filelist = lapply(as.list(list.dirs(path=raster_folder, recursive=F)), list.files, recursive=T, full.names=T, pattern="*.gri")
   
   message("Finished.")
   # Create one single-column dataframe with all elements in form of the filepath, but R recgonizes it only as text
   # Dataframe with ~2.5 million records (commercial only)
   message("Compiling filepaths of rasters ..")
+  
+  
   #The following create new dataframe fields for IDnum and year..
   
-  fl<-as.data.frame(filelist)
   
-  #fl = do.call(rbind, lapply(filelist, function(xx) {
-  # xx = as.data.frame(xx, stringsAsFactors=F)
-  #  names(xx) = "FILEPATH"
-  #  return(xx) }) )
+  
+  fl = do.call(rbind, lapply(filelist, function(xx) {
+   xx = as.data.frame(xx, stringsAsFactors=F)
+    names(xx) = "FILEPATH"
+    return(xx) }) )
 
   #fl = paste(sd,"individualrasters","MA","2013","70766.grd",sep="/")
   #fl = as.data.frame(fl)
@@ -77,7 +82,7 @@ message("Done.")
   table(fl$YEAR)
 
   message("
-  The cross-tab looked like this on April 8, 2021.  Yours should look similar.
+  The cross-tab,   table(fl$STATE, fl$YEAR), looked like this on April 8, 2021.  Yours should look similar.
         1996  1997  1998  1999  2000  2001  2002  2003  2004  2005  2006  2007  2008  2009  2010  2011  2012  2013  2014  2015  2016  2017  2018  2019
   CN       0     0     0     0     4     1     0     0     0     0     0     1     0     0     0     0     0     0     2     0     0     0     0     0
   CT    2222  2132  2381  2152  2533  2820  2825  2516  2532  2631  2492  2308  2127  1954  1990  1844  2095  1590  1354  1507  1529  1243  1227  1124

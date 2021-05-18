@@ -22,7 +22,7 @@ This is the markdown document used to make raster maps for Herring FW7.  It uses
 
 ```{r global_options, include=FALSE}
 # A switch to run or not run some of the confidentiality code.  Set to true to run the confidentiality checker and mapping. Set to False to skip this lengthy step
-eval_switch<-TRUE
+#eval_switch<-TRUE
 eval_switch<-FALSE
 
 # ### install offshoreWind package from Github if needed
@@ -92,6 +92,16 @@ root.table.path = file.path(project_root_path,"tables","Herring","Framework7")
 ML.GIS.PATH<-file.path(network_location,"home2", "mlee", "spatial data")
 
 #############################################################################
+
+# Fire up ROracle if you're on a unix machine.
+  if (.Platform$OS.type == "unix") {
+     if(!require(ROracle)) {
+    install.packages("ROracle")
+    require(ROracle)}
+#SETUP ROracle connections
+source(file.path(project_root_path,"R_code/project_logistics/R_credentials.R"))
+  }
+
 
 
 #############################################################################
@@ -703,24 +713,8 @@ ptm.SCRIPT = Sys.time() #bench marking
 #                               pwd=rstudioapi::askForPassword("Oracle password"), believeNRows=FALSE) # use r studio api to askf for creds
     }
   
-  if (.Platform$OS.type == "unix") { # if os is Linux (i.e. on Venus) use ROracle
-    if(!require(ROracle)) {
-    install.packages("ROracle")
-    require(ROracle)}
-    
-    host <- "sole.nefsc.noaa.gov"
-    sid <- oracle_server
-    #host <- "nova.nefsc.noaa.gov"
-    port <- 1526
-    uid <- oracle_username
-    mypass <- oracle_password
-    drv <- dbDriver("Oracle")
-    
-    connect.string<-paste(
-     "(DESCRIPTION=",
-     "(ADDRESS=(PROTOCOL=tcp)(HOST=", host, ")(PORT=", port, "))",
-     "(CONNECT_DATA=(SID=", sid, ")))", sep="")
-    CONN <- dbConnect(drv, uid, password=mypass, dbname=connect.string)
+  if (.Platform$OS.type == "unix") { # if os is Linux (i.e. on Venus) use ROracle.  This is set up in the R_credentials.R file.
+        CONN <- sole_conn
   }
 # Note: In order for ROracle to work the user may need to create a file named ".Renviron" and place into top directory of personal shared drive with the following sequential lines:
 # ORACLE_HOME=/ora1/app/oracle/product/11.2.0/dbhome_1
