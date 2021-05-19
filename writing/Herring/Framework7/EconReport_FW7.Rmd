@@ -71,7 +71,7 @@ desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
 #############################################################################
 # versioning options
 #todaysdate <- Sys.Date()
-todaysdate<-"2021-04-08"
+todaysdate<-"2021-05-18"
 #############################################################################
 # Paths, names, and locations of inputs and outputs
 offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
@@ -80,7 +80,7 @@ wind_area_hard_name = "Herring Framework 7"
 
 raster_manifest_location<-file.path(project_root_path,"raw_data")
 #individual.raster.file="raster_manifest_2021-03-15.Rds"
-individual.raster.file="raster_manifest_2021-04-08.Rds"
+individual.raster.file=paste0("raster_manifest_",todaysdate,".Rds")
 payloadRDS=file.path(raster_manifest_location,individual.raster.file)
 
 root.geotiff.path<-file.path(project_root_path,"geotiffs","Herring","Framework7")

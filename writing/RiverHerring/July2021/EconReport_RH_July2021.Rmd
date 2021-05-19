@@ -86,7 +86,7 @@ desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
 #############################################################################
 # versioning options
 todaysdate <- Sys.Date()
-todaysdate<-"2021-04-29"
+todaysdate<-"2021-04-08"
 #############################################################################
 # Paths, names, and locations of inputs and outputs
 offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
@@ -153,7 +153,7 @@ num_jenks_subs=5000 # Maybe this should be higher; set to 1000 for the map produ
 
 # Here we exclude all cells <=1. (Later we deal with rasters with so few cells above the lower bound value,
     # that we change the sample size to match the number of cells with those values.)
-jenks.lowerbound=1
+jenks.lowerbound=1/rescale_factor
 
 # Min and Max x and y values set to standardize plot extent # the plot extent is set, but then adjusted based on the location of points in the plotted region
 my.ylimit=c(250000,850000)
@@ -212,7 +212,7 @@ myckey <- list(labels=list(cex=2)) # Set the size of color ramp labels (?)
 ```	
 
 
-```{r getcallArea, eval = F}  
+```{r getcallArea, eval = FALSE}  
 #Plopping this in here, so I know how to find it if I have to update.  It looks like it took 5-10 hours per area, per year on MARS with 8 cores.  So that's a long time.
 getCallAreaEffort(raster_folder =
     file.path(network_location,"work5/socialsci/Geret_Rasters/Data/individualrasters"),
