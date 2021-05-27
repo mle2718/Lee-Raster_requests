@@ -383,10 +383,10 @@ top_fmp_section = TRUE
 other_fmp_section = TRUE
 top_species_section = TRUE
 select_species_section = FALSE
-select_gear_section = TRUE
-fishery_dependence_section = TRUE
+select_gear_section = FALSE
+fishery_dependence_section = FALSE
 
-select_gear_custom =TRUE
+select_gear_custom =FALSE
 
 trip_and_vessel_section = FALSE
 
@@ -1673,6 +1673,9 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
 Descriptions of Selected Fishery Landings and Estimates of Vessel Revenue from Areas: A Planning-level Assessment 
 
 Small Mesh Bottom Trawl only (<=3.5 inch mesh)
+
+** Please keep in mind that we confined our analysis to only trips that fished with small mesh bottom trawl gear. This means that, while we have figures that describe impacts in percentage terms (say, the percentage of revenues by a permit that are in a particular area), the denomininator in those sections is "small mesh bottom trawl revenue" and not "all fishing revenue" **
+
 <br>
 
 Prepared by:  
