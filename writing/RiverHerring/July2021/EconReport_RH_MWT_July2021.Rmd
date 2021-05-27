@@ -1,5 +1,5 @@
 ---
-title: "Tables and Reports for Small Mesh Bottom Trawl River Herring"
+title: "Tables and Reports for midwater Trawl -  River Herring Areas"
 author: Min-Yang Lee
 date: "`r format(Sys.time(), '%B %d, %Y')`" 
 output:
@@ -1675,7 +1675,7 @@ Descriptions of Selected Fishery Landings and Estimates of Vessel Revenue from A
 
 Midwater and Paired Midwater Trawl Only
 
-** Please keep in mind that we confined our analysis to only trips that fished with midwater trawl gear. This means that, while we have figures that describe impacts in percentage terms (say, the percentage of revenues by a permit that are in a particular area), the denomininator in those sections is "midwater trawl revenue" and not "all fishing revenue" **
+**Please keep in mind that we confined our analysis to only trips that fished with midwater trawl gear. This means that, while we have figures that describe impacts in percentage terms (say, the percentage of revenues by a permit that are in a particular area), the denomininator in those sections is "midwater trawl revenue" and not "all fishing revenue"**
 
 <br>
 
@@ -2369,30 +2369,12 @@ if (single_area_summaries) {
 ```
 
 
-```{r other_impacted_fmps_dynamic_text, results='asis', echo=FALSE, eval = T} 
-
-# paste0(otherfmpsnames[-length(otherfmpsnames)], collapse = ", ")` 
-# 
-# paste0(" and ", otherfmpsnames[length(otherfmpsnames)])
-# 
-# paste0(" and ", otherfmpsnames[length(otherfmpsnames)])
-# 
-# ifelse(any(otherfmpsnames %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in the ", wind_area_name, "  area)."),".")
-# 
-# ifelse(any(otherfmpsnames %in% "All Others"), paste0(" The category \"All Others\" refers to FMPs with less than three permits impacted to protect data confidentiality. "),".")
-
-# ifelse(any(otherfmpsnames %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in the ", wind_area_name, "  area)."),".")
+```{r other_impacted_fmps_dynamic_text, results='asis', echo=FALSE, eval = other_fmp_section} 
 
 otherfmpsnames <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(unique(fmp_merge$FMP) %notin% top_five_fmp_names), perl=TRUE)
 otherfmpsnames[otherfmpsnames=="None"] <- "No Federal FMP"
 
 ```
-
-<!-- ### Other Impacted FMPs  -->
- 
-<!-- We analyzed other impacted FMPs separately in order to better visualize the estimated landings and revenues. The other impacted FMPs are: `r paste0(otherfmpsnames[-length(otherfmpsnames)], collapse = ", ")`  -->
-<!-- `r paste0(" and ", otherfmpsnames[length(otherfmpsnames)])`. `r ifelse(any(otherfmpsnames %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in the ", wind_area_name, " area)."),"")` -->
-<!-- `r ifelse(any(otherfmpsnames %in% "All Others"), paste0(" The category \"All Others\" refers to FMPs with less than three permits or dealers impacted to protect data confidentiality. "),".")` `r revenue_deflation_note` `r rounded_message`  -->
 
 ```{r other_impacted_fmps, results='asis', eval = other_fmp_section} 
 
