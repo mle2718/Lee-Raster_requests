@@ -1314,6 +1314,7 @@ allZones <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", allZones1), perl=TRU
 
 ```{r subset_MWT, eval=F}
 REVENUEFILE<-REVENUEFILE[which(REVENUEFILE$GEARCAT %in% c("Midwater Trawl")),] 
+REVENUEFILE_backup<-REVENUEFILE
 
 FIN<-FIN[which(FIN$GEARCAT %in% c("Midwater Trawl")),] 
 FIN_backup <- FIN
@@ -1323,8 +1324,8 @@ FIN_backup <- FIN
 
 
 ```{r subset_smOTF, eval=T}
-REVENUEFILE<-REVENUEFILE[which(FIN$GEARCAT %in% c("Bottom Trawl") & FIN$MESH <=3.5),]
-
+REVENUEFILE<-REVENUEFILE[which(REVENUEFILE$GEARCAT %in% c("Bottom Trawl") & REVENUEFILE$MESH <=3.5),]
+REVENUEFILE_backup<-REVENUEFILE
 FIN<-FIN[which(FIN$GEARCAT %in% c("Bottom Trawl") & FIN$MESH <=3.5),]
 FIN_backup <- FIN
 
