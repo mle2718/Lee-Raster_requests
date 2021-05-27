@@ -2812,6 +2812,7 @@ regimes<-c("1","2","3")
 knitr::include_graphics(file.path(cleaned.image.path1,paste0("reclass_MWT_Regime_", regimes,".png")))
 ```
 
+## Small Mesh Bottom Trawl River herring
 
 
 ```{r RHS_smOTF, fig.show = "hold", out.width = "48%", fig.cap="\\label{herring_only} Total Revenue by Small Mesh Bottom Trawl.Top Left: 2008-2011. Top Right: 2012-2015.  Bottom: 2016-2019.",  fig.align = "center", echo=FALSE}
