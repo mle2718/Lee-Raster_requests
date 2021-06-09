@@ -2796,10 +2796,12 @@ Commerical Fisheries landings data, Vessel Trip Reports, and Surfclam/OceanQuaho
 </center>
 ## Caveats and notes:
 
-* Values are reported in nominal dollars.
+* When mapped, values are reported in nominal dollars per square kilometer.
 * When mapped, values reported are nominal dollars per square kilometer.
-* Pounds are reported in landed (dressed) pounds.
+* Pounds are reported in landed pounds.
 * Data summarized here is based on vessels that are required to provide federal VTRs.
+
+\newpage
 
 # Selected Maps   
 
@@ -2811,6 +2813,7 @@ cleaned.image.path1<-file.path(root.image.path,paste("MWT",todaysdate,sep="_"),"
 regimes<-c("1","2","3")
 knitr::include_graphics(file.path(cleaned.image.path1,paste0("reclass_MWT_Regime_", regimes,".png")))
 ```
+\newpage
 
 ## Small Mesh Bottom Trawl River herring
 
