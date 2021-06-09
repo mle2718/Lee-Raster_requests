@@ -1671,7 +1671,7 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
 [Back](https://www.fisheries.noaa.gov/resource/data/socioeconomic-impacts-atlantic-offshore-wind-development)
 
 
-Descriptions of Selected Fishery Landings and Estimates of Vessel Revenue from Areas: A Planning-level Assessment 
+Descriptions of Selected Fishery Landings and Estimates of Vessel Revenue from Selected Areas
 
 Midwater and Paired Midwater Trawl Only
 
@@ -1714,13 +1714,14 @@ Commerical Fisheries landings data, Vessel Trip Reports, and Surfclam/OceanQuaho
 
 
 Some caveats/notes:
-
+* When mapped, values are reported in nominal dollars per square kilometer.
+* When mapped, values reported are nominal dollars per square kilometer.
 * Values are reported in nominal dollars. Values in 2019 dollars are reported as well (see below for details).
 * Pounds are reported in landed (dressed) pounds.
 * Data summarized here is based on vessels that are required to provide federal VTRs.
 * Federal lobster vessels, with only lobster permits, do not have a VTR requirement. Many Atlantic Highly Migratory Species permitted vessels also do not have a VTR requirement. Trips with no VTR are not reflected in this summary.
 * There exist other fisheries in State waters that may not be reflected in data from federal sources (e.g. whelk, bluefish). It is recommended to query state agencies for additional data within state waters.
-* All summaries presented here are built from percentages of a trip that overlapped spatially with the WEAs. These percentages were applied to landings and values for that trip and summed. This differs from simply using the self-reported VTR/clam logbook locations as those place all value from that trip at a single point. Use of the VTR raster model is more representative as smoothing reported locations reduces the effect of location inaccuracy.
+* All summaries presented here are built from percentages of a trip that overlapped spatially with the areas. These percentages were applied to landings and values for that trip and summed. This differs from simply using the self-reported VTR/clam logbook locations as those place all value from that trip at a single point. Use of the VTR raster model is more representative as smoothing reported locations reduces the effect of location inaccuracy.
 
 <br>
 
