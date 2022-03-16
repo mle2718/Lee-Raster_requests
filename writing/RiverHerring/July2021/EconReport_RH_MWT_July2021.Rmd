@@ -36,22 +36,49 @@ Keep just midwater trawl and small mesh BT.
 -->
 
 ```{r global_options, include=FALSE}
+# 
+# # ### install offshoreWind package from Github if needed
+# if(!require(offshoreWind)) {
+#   if(!require(devtools)) {
+#     install.packages("devtools")
+#     require(devtools)}
+#   install_github("dcorvi/offshoreWind")
+#   require(offshoreWind)}
+# 
+# PKG <- c("foreign", "data.table", "dichromat", "RColorBrewer", "lattice", "scales",  "openxlsx", "sp", "rgdal", "raster","snowfall",
+#          "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4","rasterVis","classInt", "rgeos")
+# for (p in PKG) {
+#   if(!require(p,character.only = TRUE)) {
+#     install.packages(p)
+#     require(p,character.only = TRUE)}
+# }
+library("offshoreWind")
+library("foreign")
+library("data.table")
+library("dichromat")
+library("RColorBrewer")
+library("lattice")
+library("scales")
+library("openxlsx")
+library("sp")
+library("rgdal")
+library("raster")
+library("snowfall")
+library("ggplot2")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("knitr")
+library("lubridate")
+library("devtools")
+library("RODBC")
+library("googledrive")
+library("googlesheets4")
+library("rasterVis")
+library("classInt")
+library("rgeos")
 
-# ### install offshoreWind package from Github if needed
-if(!require(offshoreWind)) {
-  if(!require(devtools)) {
-    install.packages("devtools")
-    require(devtools)}
-  install_github("dcorvi/offshoreWind")
-  require(offshoreWind)}
 
-PKG <- c("foreign", "data.table", "dichromat", "RColorBrewer", "lattice", "scales",  "openxlsx", "sp", "rgdal", "raster","snowfall",
-         "ggplot2", "dplyr", "tidyr", "stringr", "knitr", "lubridate", "devtools", "RODBC",  "googledrive", "googlesheets4","rasterVis","classInt", "rgeos")
-for (p in PKG) {
-  if(!require(p,character.only = TRUE)) {
-    install.packages(p)
-    require(p,character.only = TRUE)}
-}
 #############################################################################
 #knitr options
 
@@ -214,13 +241,13 @@ myckey <- list(labels=list(cex=2)) # Set the size of color ramp labels (?)
 
 ```{r getcallArea, eval = FALSE}  
 #Plopping this in here, so I know how to find it if I have to update.  It looks like it took 5-10 hours per area, per year on MARS with 8 cores.  So that's a long time.
-getCallAreaEffort(raster_folder =
-    file.path(network_location,"work5/socialsci/Geret_Rasters/Data/individualrasters"),
-    shapefile_f = file.path(project_root_path,"/input_data/RiverHerring/July2021/individual"),
-    output_f = overlap_data_path,
-    start = START.YEAR,
-    end = END.YEAR)
-```
+    get_overlays(
+      raster_folder = file.path(network_location, "work5/socialsci/Geret_Rasters/Data/individualrasters"),
+      file_list_and_extents_folder = file.path(network_location, "work5/socialsci/Geret_Rasters/Data/offshore_wind_package_data/raster_extents_and_file_list"),
+      shapefile_f = file.path(project_root_path,"/input_data/RiverHerring/July2021/individual"),
+      output_f = overlap_data_path,
+      start = START.YEAR,
+      end = END.YEAR)```
 
 
 ```{r construct raster manifest, eval = F}  
@@ -355,7 +382,7 @@ if (query_google_drive_lease_table) {
 # --------------------------------------------------------------------------------------------------------------------------------------- #
 # Adding on extra years - for adding an overlay of a particular lease area for any new year(s) outside of 2008-2018 - will use regex to figure out years in folder 
 append_year = FALSE
-additonal_year_overlap_data_path = paste0(network_location, "home5/dcorvi/All_Lease_Areas_2019_output") # path to folder of overlays for this lease area with any extra years
+additonal_year_overlap_data_path = file.path(network_location, "home5/dcorvi/overlays/All_Lease_Areas_2019_output") # path to folder of overlays for this lease area with any extra years
 
 # Find the file path to the data-raw folder in the package and return error if it cant find it
 raw_data_path = file.path(offshoreWindpath,"data-raw")
@@ -939,41 +966,26 @@ if (noaa_data_source == "dmis" && query_dmis_table == FALSE) {
 # SPECIES <- offshoreWind::SPECIES %>% mutate(Formatted_2 = ifelse(NESPP3==710, "No Federal FMP", Formatted_2))
 
 # Note: cannot determine days at sea with dmis/clam data
-if (noaa_data_source == "dmis") { #new dmis table with imgids 
-  ptm.DMIS = Sys.time()
-APSD_DMIS <- as_tibble(
-  APSD_DMIS %>% 
-    # mutate(SECGEARFISH = if_else(NESPP3=="754","754", SECGEARFISH)) %>% # fix data cleaning isssue with NESPP3 code in clam data 
-    # mutate(SECGEARFISH = if_else(NESPP3=="769","769", SECGEARFISH)) %>% 
-    # mutate(SPPNAME = if_else(SPPNAME=="QUAHOGS/BUSHEL","DRC", SPPNAME)) %>% # fix data cleaning isssue with Gearcode in clam data
-    # mutate(SPPNAME = if_else(SPPNAME=="CLAM, SURF/BUSHEL","DRC", SPPNAME)) %>% 
-    # dplyr::select(-c("GEARCODE", "NESPP3")) %>% # remove columns with wrong names
-    dplyr::select(-c("GEARCODE")) %>% # remove columns with wrong names
-    # dplyr::rename("IDNUM"=IMGID, "PORTLND1"=VTR_PORT, "STATE1"=VTR_STATE, "DATESAIL"=DATE_TRIP, "NESPP3"=SECGEARFISH,
-    #        "GEARCODE"=SPPNAME, "REVENUE"=DOLLAR, "QTYKEPT"=LANDED, "LAT"=DDLAT, "LON"=DDLON) %>%
-    # dplyr::rename("IDNUM"=IMGID, "PORTLND1"=VTR_PORT, "STATE1"=VTR_STATE, "DATESAIL"=DATE_TRIP, "GEARCODE"=SECGEARFISH,
-    #        "SPPNM"=SPPNAME, "REVENUE"=DOLLAR, "LIVE"=POUNDS, "QTYKEPT"=LANDED, "LAT"=DDLAT, "LON"=DDLON) %>% 
-    # dplyr::rename("IDNUM"=IMGID, "PORTLND1"=VTR_PORT, "STATE1"=VTR_STATE, "DATESAIL"=DATE_TRIP, "GEARCODE"=SECGEARFISH,
-    #        "SPPNM"=SPPNAME, "REVENUE"=DOLLAR, "LIVE"=POUNDS, "QTYKEPT"=LANDED, "LAT"=DDLAT, "LON"=DDLON, "DAS"=TRIP_LENGTH) %>% 
-    dplyr::rename("IDNUM"=IMGID, "PORTLND1"=VTR_PORT, "STATE1"=VTR_STATE, "DATESAIL"=DATE_TRIP, "GEARCODE"=SECGEARFISH, 
-           "REVENUE"=DOLLAR, "LIVE"=POUNDS, "QTYKEPT"=LANDED, "LAT"=DDLAT, "LON"=DDLON, "DAS"=TRIP_LENGTH) %>% 
-    mutate("MONTH" = as.integer(format(DATESAIL,"%m"))) %>% # create column for month 
-    mutate("PORTLANDED" = paste0(PORTLND1,", ",STATE1)) %>% 
-    mutate("NESPP3" = as.integer(NESPP3)) %>% 
-    left_join(x = ., y = SPECIES, by = "NESPP3") %>% # join species names by NESPP3 from previously created csv file saved as flat file in data/ 
-    mutate("FMP" = Formatted_2) %>% # fix formatting for FMPs 
-    dplyr::select(-Formatted_2) %>% 
-    mutate("FMP" = if_else(FMP=="","None", FMP)) %>% #rename blank FMPs 
-    # dplyr::rename("SPPNM"=SPPNM.y, "SPPNM_s"=SPPNM.x) %>%
-    # mutate("FMP" = if_else(is.na(FMP),"Missing Species Code Mapping", FMP)) %>% # fix missing data for species codes, FMPs and code to species mapping
-    mutate("FMP" = if_else(is.na(FMP),"All Others", FMP)) %>% # fix missing data for species codes, FMPs and code to species mapping
-    # mutate("SPPNAME" = if_else(is.na(SPPNAME) & is.na(NESPP3), "Missing Species Code", SPPNAME)) %>% 
-    # mutate("SPPNAME" = if_else(is.na(SPPNAME), "Species Name Is Null", SPPNAME)) %>% 
-    mutate("SPPNM" = if_else(is.na(SPPNM) & is.na(NESPP3), "UNKNOWN", SPPNM)) %>%
-    left_join(x = ., y = subset(offshoreWind::VLGEARTABLE, select=c(GEARCODE, GEARNM)), by = "GEARCODE") #add gearnames from VLGEAR table (saved as flat file from Oracle)
-  ) 
-  message(paste0("Run time for variable replacement and joins in DMIS table: ", as.double(round(difftime(Sys.time(), ptm.DMIS, units='secs'), 2))%/%60," minute(s) ",as.double(round(difftime(Sys.time(), ptm.DMIS, units='secs'), 2))%%60," second(s)"))
-}
+
+    if (noaa_data_source == "dmis") { #new dmis table with imgids
+      ptm.DMIS = Sys.time()
+    APSD_DMIS <- as_tibble(
+      APSD_DMIS %>%
+        dplyr::select(-c("GEARCODE")) %>% # remove columns with wrong names
+        dplyr::rename("IDNUM"=IMGID, "PORTLND1"=VTR_PORT, "STATE1"=VTR_STATE, "DATESAIL"=DATE_TRIP, "GEARCODE"=SECGEARFISH,
+               "REVENUE"=DOLLAR, "LIVE"=POUNDS, "QTYKEPT"=LANDED, "LAT"=DDLAT, "LON"=DDLON, "DAS"=TRIP_LENGTH) %>%
+        mutate("MONTH" = as.integer(format(DATESAIL,"%m"))) %>% # create column for month
+        mutate("PORTLANDED" = paste0(PORTLND1,", ",STATE1)) %>%
+        left_join(x = ., y = SPECIES, by = "NESPP3") %>% # join species names by NESPP3 from previously created csv file saved as flat file in data/
+        mutate("NESPP3" = as.integer(NESPP3)) %>%
+        mutate("FMP" = if_else(FMP=="","None", FMP)) %>% #rename blank FMPs
+        mutate("FMP" = if_else(is.na(FMP),"All Others", FMP)) %>% # fix missing data for species codes, FMPs and code to species mapping
+        mutate("SPPNM" = if_else(is.na(SPPNM) & is.na(NESPP3), "UNKNOWN", SPPNM)) %>%
+        left_join(x = ., y = subset(offshoreWind::VLGEARTABLE, select=c(GEARCODE, GEARNM)), by = "GEARCODE") #add gearnames from VLGEAR table (saved as flat file from Oracle)
+      )
+      message(paste0("Run time for variable replacement and joins in DMIS table: ", as.double(round(difftime(Sys.time(), ptm.DMIS, units='secs'), 2))%/%60," minute(s) ",as.double(round(difftime(Sys.time(), ptm.DMIS, units='secs'), 2))%%60," second(s)"))
+    }
+
 
 # sort(unique(APSD_DMIS %>% filter(is.na(FMP)) %>% pull(NESPP3))) %notin% SPECIES$NESPP3
   
@@ -1714,6 +1726,7 @@ Commerical Fisheries landings data, Vessel Trip Reports, and Surfclam/OceanQuaho
 
 
 Some caveats/notes:
+
 * When mapped, values are reported in nominal dollars per square kilometer.
 * When mapped, values reported are nominal dollars per square kilometer.
 * Values are reported in nominal dollars. Values in 2019 dollars are reported as well (see below for details).
