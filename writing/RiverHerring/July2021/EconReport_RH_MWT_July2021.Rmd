@@ -247,7 +247,8 @@ myckey <- list(labels=list(cex=2)) # Set the size of color ramp labels (?)
       shapefile_f = file.path(project_root_path,"/input_data/RiverHerring/July2021/individual"),
       output_f = overlap_data_path,
       start = START.YEAR,
-      end = END.YEAR)```
+      end = END.YEAR)
+```
 
 
 ```{r construct raster manifest, eval = F}  
