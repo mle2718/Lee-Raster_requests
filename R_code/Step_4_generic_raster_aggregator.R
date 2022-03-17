@@ -46,7 +46,7 @@ for (yr in START.YEAR:END.YEAR)  {
     sfLibrary(sp, verbose=F)
     sfLibrary(rgeos, verbose=F)
     sfLibrary(rgdal, verbose=F)
-    sfLibrary(R2HTML, verbose=F)
+    #sfLibrary(R2HTML, verbose=F)
     YEAR = yr
     sfExport("fileswanted", "BASE.RASTER","RASTER_FILE","FIELD","YEAR","export.geotiff.path","MARG")
     
@@ -120,11 +120,11 @@ for (yr in START.YEAR:END.YEAR)  {
       #if(cellStats(HOL2, stat='sum')/target.revenue > 0.99) print(paste("Hurray! ", (cellStats(RASsum, stat="sum")/target.revenue)*100, "% match! Huzzah!"))
       writeRaster(HOL2, file.path(export.geotiff.path,rastername), format="GTiff", overwrite=T)
       
-      w <- file.path(export.geotiff.path, paste0(rastername,".html"))  
-      HTML(paste0("Raster Name: ", rastername), w, F)
-      HTML(paste0("Target Sum: ", target.sum), w, T)
-      HTML(paste0("Number of Records): ", NR), w, T)
-      HTML(paste0("Percent Match: ", (cellStats(HOL2, stat="sum")/target.sum)*100),w,T)
+      #w <- file.path(export.geotiff.path, paste0(rastername,".html"))  
+      #HTML(paste0("Raster Name: ", rastername), w, F)
+      #HTML(paste0("Target Sum: ", target.sum), w, T)
+      #HTML(paste0("Number of Records): ", NR), w, T)
+      #HTML(paste0("Percent Match: ", (cellStats(HOL2, stat="sum")/target.sum)*100),w,T)
       #HTML(paste("Share of Revenue:", percent(round(SHARE.OF.REVENUE,3)), "percent", sep=" "),w,T)
       return(list(HOL2, ERRS,rastername))}
       
