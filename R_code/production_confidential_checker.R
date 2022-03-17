@@ -42,6 +42,11 @@ flwy=unique(flwy)
 
 fileswanted<-merge(flwy,FINAL_wyshort, all.x=TRUE,all.y=FALSE, by.x = 'IDNUM', by.y='IDNUM')
 
+if (nrow(fileswanted)<=2){
+  myr2<-myras
+  setValues(myr2,0)
+  timer1<-Sys.time()
+} else{
 
 fileswanted$myid <- seq.int(nrow(fileswanted))
 fileswanted$LAT<-abs(fileswanted$LAT)
@@ -79,7 +84,7 @@ for (working_level in blength:2){
   sfLibrary(sp, verbose=F)
   sfLibrary(rgeos, verbose=F)
   sfLibrary(rgdal, verbose=F)
-  sfLibrary(R2HTML, verbose=F)
+  #sfLibrary(R2HTML, verbose=F)
   
   NR = as.numeric(NROW(fileswanted)) #NR = number of rows in fileswanted
   sfExport("fileswanted","BASE.RASTER", "NR")
@@ -161,6 +166,7 @@ for (working_level in blength:2){
   
   sfStop() 
   }
+}
 }
 timerB<-Sys.time()
 timerB
