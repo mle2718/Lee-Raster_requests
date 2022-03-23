@@ -36,8 +36,10 @@ I'm getting some "timeout" problems because the parts that check the rasters tak
 
 ```{r global_options, include=FALSE, eval=TRUE}
 # A switch to run or not run some of the confidentiality code.  Set to true to run the confidentiality checker and mapping. Set to False to skip this lengthy step
-eval_switch<-TRUE
+#eval_switch<-TRUE
+#eval_switch2<-eval_switch
 eval_switch<-FALSE
+eval_switch2<-TRUE
 # 
 # # ### install offshoreWind package from Github if needed
 # if(!require(offshoreWind)) {
@@ -259,7 +261,7 @@ myckey <- list(labels=list(cex=2)) # Set the size of color ramp labels (?)
 
 
 ```{r construct raster manifest, eval=FALSE}  
-source(file.path(project_root_path,"R_code/raster_manifest.R")
+source(file.path(project_root_path,"R_code/raster_manifest.R"))
 ```
 
 
@@ -1101,6 +1103,8 @@ FIN$GEARCAT[FIN$GEARNM %in% c("FYKE NET","OTHER GEAR", "HAND RAKE", "DIVING GEAR
                                   "MIXED GEAR","CASTNET","SEINE,HAUL")] <- "Other Gear"
 FIN$GEARCAT[FIN$GEARNM=="LONGLINE,PELAGIC"] <- "Pelagic Longline"
 FIN$GEARCAT[FIN$GEARNM=="PURSE SEINE"] <- "Purse Seine"
+FIN$GEARCAT[FIN$GEARNM=="SEINE, PURSE"] <- "Purse Seine"
+FIN$GEARCAT[FIN$GEARNM=="SEINE,PURSE"] <- "Purse Seine"
 FIN$GEARCAT[FIN$GEARNM %in% c("GILL NET,OTHER","GILL NET,RUNAROUND")] <- "Other Gillnet"
 FIN$GEARCAT[FIN$GEARCAT==""] <- "Other Gear"
 FIN$GEARCAT[which(is.na(FIN$GEARCAT))] <- "Other Gear"
@@ -1809,7 +1813,6 @@ parsed_list1$REGIME = as.numeric(sapply(parsed_list1$NAME, USE.NAMES=F, function
 ##########################################################################################################################
 
 
-# Keep months 9,10,11
 
 for (myregime in 1:3) {
    yearfileswanted <- parsed_list1[which(parsed_list1$REGIME==myregime),]
@@ -2128,22 +2131,22 @@ RHS3 = basemap_RHS[basemap_RHS$Id==3,]
 RHS4 = basemap_RHS[basemap_RHS$Id==4,]
 
       
-      print(jcons+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
-            + layer(sp.lines(NLS_grnd))+ layer(sp.lines(RHS1)) + layer(sp.lines(RHS2))
-            +layer(sp.lines(RHS3))+layer(sp.lines(RHS4)) + 
-              layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
-            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
-            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
-            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+      print(jcons+ latticeExtra::layer(sp.lines(CAI_grnd)) + latticeExtra::layer(sp.lines(CAII_grnd))
+            + latticeExtra::layer(sp.lines(NLS_grnd))+ latticeExtra::layer(sp.lines(RHS1)) + latticeExtra::layer(sp.lines(RHS2))
+            +latticeExtra::layer(sp.lines(RHS3))+latticeExtra::layer(sp.lines(RHS4)) + 
+              latticeExtra::layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
+            #+ latticeExtra::layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ latticeExtra::layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + latticeExtra::layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
             
       )
       
       # print(jcons 
-      #       + layer(sp.polygons(my_basemap2,fill=mylandfill))
-      #       + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
-            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
-            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
-            #+ layer(grid.draw(gr.text))
+      #       + latticeExtra::layer(sp.polygons(my_basemap2,fill=mylandfill))
+      #       + latticeExtra::layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ latticeExtra::layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+            #+ latticeExtra::layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
+            #+ latticeExtra::layer(grid.draw(gr.text))
      # )
       dev.off()
 ##################################      
@@ -2178,21 +2181,21 @@ RHS4 = basemap_RHS[basemap_RHS$Id==4,]
       png(file=reclassPNG.file, width=png.width, height=png.height, units="px"
           , bg="white")
       
-      print(rclassed+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
-            + layer(sp.lines(NLS_grnd))+ layer(sp.lines(RHS1)) + layer(sp.lines(RHS2))
-            +layer(sp.lines(RHS3))+layer(sp.lines(RHS4)) + 
-              layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
-            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
-            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
-            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+      print(rclassed+ latticeExtra::layer(sp.lines(CAI_grnd)) + latticeExtra::layer(sp.lines(CAII_grnd))
+            + latticeExtra::layer(sp.lines(NLS_grnd))+ latticeExtra::layer(sp.lines(RHS1)) + latticeExtra::layer(sp.lines(RHS2))
+            +latticeExtra::layer(sp.lines(RHS3))+latticeExtra::layer(sp.lines(RHS4)) + 
+              latticeExtra::layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
+            #+ latticeExtra::layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ latticeExtra::layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + latticeExtra::layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
             
       )
       #print(rclassed
-       #     + layer(sp.polygons(my_basemap2,fill=mylandfill))
-        #    + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
-            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
-            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
-            #+ layer(grid.draw(gr.text))
+       #     + latticeExtra::layer(sp.polygons(my_basemap2,fill=mylandfill))
+        #    + latticeExtra::layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ latticeExtra::layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+            #+ latticeExtra::layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
+            #+ latticeExtra::layer(grid.draw(gr.text))
       #)
       dev.off()
       
@@ -2229,7 +2232,7 @@ End section to construct and map aggregated rasters for Small Mesh Bottom Trawl 
 
 <!-- Begin section to construct and map aggregated rasters for Small Mesh Bottom Trawl -->
 
-```{r prep_geotiffs2, include=FALSE,eval=eval_switch}   
+```{r prep_geotiffs2, include=FALSE,eval=eval_switch2}   
 # Read in the file attributes of the individual rasters.
 
 #I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
@@ -2304,12 +2307,12 @@ if (nrow(confid_prob)>=1){
 rm(tsA)
 ```	
 
-```{r makegeotiffs2, include=FALSE, eval=eval_switch}  
+```{r makegeotiffs2, include=FALSE, eval=eval_switch2}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 
 ```	
 
-```{r secondary_aggregation_part2, include=FALSE, eval=eval_switch} 
+```{r secondary_aggregation_part2, include=FALSE, eval=eval_switch2} 
 
 
 #################################################
@@ -2366,7 +2369,6 @@ parsed_list1$REGIME = as.numeric(sapply(parsed_list1$NAME, USE.NAMES=F, function
   temp = do.call(rbind,strsplit(as.character(zz), split = "_"))
   return(temp[4]) }))
 
-# Keep months 9,10,11
 
 for (myregime in 1:3) {
    yearfileswanted <- parsed_list1[which(parsed_list1$REGIME==myregime),]
@@ -2422,7 +2424,7 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 ```	
 
 
-```{r check_confidential_secondary_aggregation2, include=FALSE, eval=eval_switch} 
+```{r check_confidential_secondary_aggregation2, include=FALSE, eval=eval_switch2} 
 #file path with geotiffs that you need to check for confidentiality
 in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
 
@@ -2498,7 +2500,7 @@ parsed_groups$REGIME<-as.numeric(parsed_groups$REGIME)
        temp <- do.call(rbind,strsplit(as.character(zz), split = "_")) 
        return(file.path(paste0(temp[1],"_",temp[2],"_",temp[3]))) }) # Adding "-1" moves you back one "/"  - as in, back one "/" separator to get the group/file folder name
      parsed_groups$Type_Metric_Extra <-paste0(parsed_groups$Type_Metric_Extra,"_regime_",parsed_groups$REGIME)
-            parsed_groups$Type_Metric_Extra <-"MWT"
+            parsed_groups$Type_Metric_Extra <-"smOTF"
 
             # Set this column to have the same value for all rows to graph things all at once.
             
@@ -2678,22 +2680,22 @@ for (t in (1:nrow(temp_R_list))){
       png(file=rawPNG.file, width=png.width, height=png.height, units="px"
           , bg="white")
       
-            print(jcons+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
-            + layer(sp.lines(NLS_grnd))+ layer(sp.lines(RHS1)) + layer(sp.lines(RHS2))
-            +layer(sp.lines(RHS3))+layer(sp.lines(RHS4)) + 
-              layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
-            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
-            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
-            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            print(jcons+ latticeExtra::layer(sp.lines(CAI_grnd)) + latticeExtra::layer(sp.lines(CAII_grnd))
+            + latticeExtra::layer(sp.lines(NLS_grnd))+ latticeExtra::layer(sp.lines(RHS1)) + latticeExtra::layer(sp.lines(RHS2))
+            +latticeExtra::layer(sp.lines(RHS3))+latticeExtra::layer(sp.lines(RHS4)) + 
+              latticeExtra::layer(sp.polygons(basemap_eastcoast, fill=mylandfill))
+            #+ latticeExtra::layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ latticeExtra::layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + latticeExtra::layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
             
       )
       
       # print(jcons 
-      #       + layer(sp.polygons(my_basemap2,fill=mylandfill))
-      #       + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
-            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
-            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
-            #+ layer(grid.draw(gr.text))
+      #       + latticeExtra::layer(sp.polygons(my_basemap2,fill=mylandfill))
+      #       + latticeExtra::layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ latticeExtra::layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+            #+ latticeExtra::layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
+            #+ latticeExtra::layer(grid.draw(gr.text))
      # )
       dev.off()
 ##################################      
@@ -2729,20 +2731,20 @@ for (t in (1:nrow(temp_R_list))){
           , bg="white")
                   
 
-      print(rclassed+ layer(sp.lines(CAI_grnd)) + layer(sp.lines(CAII_grnd))
-            + layer(sp.lines(NLS_grnd))+ layer(sp.lines(RHS1)) + layer(sp.lines(RHS2))
-            +layer(sp.lines(RHS3))+layer(sp.lines(RHS4)) + 
-              layer(sp.polygons(basemap_eastcoast, fill=mylandfill))            #+ layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
-            #+ layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
-            + layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+      print(rclassed+ latticeExtra::layer(sp.lines(CAI_grnd)) + latticeExtra::layer(sp.lines(CAII_grnd))
+            + latticeExtra::layer(sp.lines(NLS_grnd))+ latticeExtra::layer(sp.lines(RHS1)) + latticeExtra::layer(sp.lines(RHS2))
+            +latticeExtra::layer(sp.lines(RHS3))+latticeExtra::layer(sp.lines(RHS4)) + 
+              latticeExtra::layer(sp.polygons(basemap_eastcoast, fill=mylandfill))            #+ latticeExtra::layer(grid.text(my.regime,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.10, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
+            #+ latticeExtra::layer(grid.text(my.gear,draw=TRUE,x=unit(0.82, "npc"),y=unit(0.075, "npc"), just="left",gp=gpar(cex=1.5)))
+            + latticeExtra::layer(grid.text(my.month,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.05, "npc"), just="left",gp=gpar(fontsize=12, cex=1.5)))
             
       )
       #print(rclassed
-       #     + layer(sp.polygons(my_basemap2,fill=mylandfill))
-        #    + layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
-            #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
+       #     + latticeExtra::layer(sp.polygons(my_basemap2,fill=mylandfill))
+        #    + latticeExtra::layer(sp.polygons(my_basemap3,lwd=2,col='gray'))
+            #+ latticeExtra::layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=2.5)))
             #+ layer(grid.text(tempyear,draw=TRUE,x=unit(0.80, "npc"),y=unit(0.1, "npc"), gp=gpar(cex=1.5)))
-            #+ layer(grid.draw(gr.text))
+            #+ latticeExtra::layer(grid.draw(gr.text))
       #)
       dev.off()
       
