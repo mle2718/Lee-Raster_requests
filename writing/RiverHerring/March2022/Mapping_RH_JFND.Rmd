@@ -31,7 +31,11 @@ Confined to only Jan, Feb, Nov, and December. The logical subset might not work 
 ```{r global_options, include=FALSE, eval=TRUE}
 # A switch to run or not run some of the confidentiality code.  Set to true to run the confidentiality checker and mapping. Set to False to skip this lengthy step
 #eval_switch<-TRUE
+#eval_switch2<-eval_switch
 eval_switch<-FALSE
+eval_switch2<-TRUE
+
+
 # 
 # # ### install offshoreWind package from Github if needed
 # if(!require(offshoreWind)) {
@@ -48,7 +52,6 @@ eval_switch<-FALSE
 #     install.packages(p)
 #     require(p,character.only = TRUE)}
 # }
-library("R2HTML")
 library("offshoreWind")
 library("foreign")
 library("data.table")
@@ -2232,7 +2235,7 @@ End section to construct and map aggregated rasters for Small Mesh Bottom Trawl 
 
 <!-- Begin section to construct and map aggregated rasters for Small Mesh Bottom Trawl -->
 
-```{r prep_geotiffs2, include=FALSE,eval=eval_switch}   
+```{r prep_geotiffs2, include=FALSE,eval=eval_switch2}   
 # Read in the file attributes of the individual rasters.
 
 #I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
@@ -2307,12 +2310,12 @@ if (nrow(confid_prob)>=1){
 rm(tsA)
 ```	
 
-```{r makegeotiffs2, include=FALSE, eval=eval_switch}  
+```{r makegeotiffs2, include=FALSE, eval=eval_switch2}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
 
 ```	
 
-```{r secondary_aggregation_part2, include=FALSE, eval=eval_switch} 
+```{r secondary_aggregation_part2, include=FALSE, eval=eval_switch2} 
 
 
 #################################################
@@ -2425,7 +2428,7 @@ writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), ov
 ```	
 
 
-```{r check_confidential_secondary_aggregation2, include=FALSE, eval=eval_switch} 
+```{r check_confidential_secondary_aggregation2, include=FALSE, eval=eval_switch2} 
 #file path with geotiffs that you need to check for confidentiality
 in.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"),"aggregated")
 
@@ -2575,7 +2578,7 @@ if(nrow(temp_R_list) >= 1){ # error catch when there was accidentally no Q or R 
 working_group<-temp_R_list
 
 TME<-working_group$Type_Metric_Extra[1]
-logical_subset<-quote(which(FINALstack$GEARCODE %in% c("MWT") &FINALstack$REGIME %in%c("1","2","3")& FINALstack$MONTH %in% c(1,2,11,12)& FINALstack[[FIELD]]>=1)) 
+logical_subset<-quote(which(FINALstack$GEARCODE %in% c("smOTF") &FINALstack$REGIME %in%c("1","2","3")& FINALstack$MONTH %in% c(1,2,11,12)& FINALstack[[FIELD]]>=1)) 
 
 
 # This comes from the prep_geotiffs1 chunk
