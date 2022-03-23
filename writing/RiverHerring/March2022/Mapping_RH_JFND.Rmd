@@ -33,7 +33,7 @@ Confined to only Jan, Feb, Nov, and December. The logical subset might not work 
 #eval_switch<-TRUE
 #eval_switch2<-eval_switch
 eval_switch<-FALSE
-eval_switch2<-TRUE
+eval_switch2<-FALSE
 
 
 # 
@@ -1531,6 +1531,7 @@ if (length(proj_area_name) == 1) {
 # dim(REVENUEFILE_oracle_overlap_source)
 # rm(REVENUEFILE_folder_overlap_source,REVENUEFILE_oracle_overlap_source)
 
+#End of the adjust_nominal_values_to_real_values chunk.
 ```
 
 ```{r create_map_of_lease_area, eval = TRUE} 
@@ -1659,6 +1660,7 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
           axis.title.x=element_blank(),
           plot.title = element_text(hjust = 0.5))
 }
+#End of the create_map_of_lease_area chunk.
 
 
 ```
@@ -1751,10 +1753,14 @@ if (nrow(confid_prob)>=1){
 }
 rm(tsA)
 
+#End of the prep_geotiffs1 chunk.
+
 ```	
 
 ```{r makegeotiffs1, include=FALSE, eval=eval_switch}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
+#End of the makegeotiffs1 chunk.
+
 ```	
 
 ```{r secondary_aggregation, include=FALSE, eval=eval_switch} 
@@ -1867,6 +1873,7 @@ holding_summer<-holding_summer/nobs
 writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), overwrite=TRUE)
 }
 }
+#End of the secondary_aggregation chunk.
 
 ```	
 
@@ -2228,6 +2235,9 @@ write.csv(parsed_groups, csv_out)
 cleaned.geotiff.path1<-cleaned.geotiff.path
 cleaned.image.path1<-cleaned.image.path
 
+
+#End of the check_confidential_secondary_aggregation chunk.
+
 ```	
 <!--
 This works properly. You will need to change some bits in the next set of 
@@ -2237,6 +2247,7 @@ End section to construct and map aggregated rasters for Small Mesh Bottom Trawl 
 
 ```{r prep_geotiffs2, include=FALSE,eval=eval_switch2}   
 # Read in the file attributes of the individual rasters.
+fl<-readRDS(payloadRDS)
 
 #I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
 
@@ -2308,10 +2319,14 @@ if (nrow(confid_prob)>=1){
   write.csv(confid_prob,file=file.path(export.geotiff.path,paste(readable_name,"confidential.csv")), row.names=FALSE)
 }
 rm(tsA)
+
+#End of the prep_geotiffs2 chunk.
+
 ```	
 
 ```{r makegeotiffs2, include=FALSE, eval=eval_switch2}  
 source(file.path(project_root_path,"R_code/Step_4_generic_raster_aggregator.R"))
+#End of the makegeotiffs2 chunk.
 
 ```	
 
@@ -2424,6 +2439,7 @@ holding_summer<-holding_summer/nobs
 writeRaster(holding_summer, filename=file.path(out.geotiff.path,outfilename), overwrite=TRUE)
 }
 }
+#End of the secondary_aggregation_part2 chunk.
 
 ```	
 
@@ -2780,6 +2796,9 @@ cleaned.geotiff.path2<-cleaned.geotiff.path
 cleaned.image.path2<-cleaned.image.path
   
 
+
+#End of the check_confidential_secondary_aggregation2 chunk.
+
 ```	
 <!-- Begin section to construct and map aggregated rasters for revenue on trips that retain herring -->
 
@@ -2841,6 +2860,7 @@ cleaned.image.path2<-file.path(root.image.path,paste("smOTF",todaysdate,sep="_")
 
 knitr::include_graphics(file.path(cleaned.image.path2,paste0("reclass_smOTF_Regime_", regimes,".png")))
 ```
+\newpage
 
 ## References  
 [DePiper GS (2014) Statistically assessing the precision of self-reported VTR fishing locations.](https://repository.library.noaa.gov/view/noaa/4806)  
