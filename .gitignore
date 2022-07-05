@@ -11,3 +11,4 @@
 *.docx
 *.doc
 R_credentials.R
+/background/*
