@@ -10,5 +10,6 @@
 *.aux
 *.docx
 *.doc
-R_credentials.R
+*credentials*
+*Credentials*
 /background/*
