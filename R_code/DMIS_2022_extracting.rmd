@@ -1,0 +1,124 @@
+---
+title: "Data_extracting"
+author: "Min-Yang Lee"
+date: "`r format(Sys.time(), '%B %d, %Y')`" 
+output:
+  pdf_document: default
+  html_document: default
+urlcolor: blue
+---
+
+<!-- 
+This is the markdown document used to extract the DMIS data and save it to a flat file. Extracting the DMIS data takes a long time. 
+-->
+# Project setup
+here(), load libraries, and set a data vintage.
+
+```{r setup, include=TRUE, echo=TRUE, results=FALSE}
+# Set Path
+here::i_am("R_code/DMIS_2022_extracting.rmd")
+
+# Please ensure you have the proper packages installed with (install.packages()) or a request to ITD if any libaries do not load.  
+library("here")
+library("RODBC")
+library("readxl")
+library("offshoreWind")
+library("tidyverse")
+
+vintage_string<-Sys.Date()
+vintage_string<-gsub("-","_",vintage_string)
+
+dmis_savename<-paste0("APSD_WIND_TEST_",vintage_string,".Rds")
+
+# You might want to run this code, but not extract and save any data. Set this switch to FALSE to do so.
+extract_switch=TRUE
+```
+
+# Organization
+
+
+```{r folder_create, include=TRUE, echo=FALSE, results=FALSE}
+# You only need to run this once, but nothing bad will happen if you keep include=TRUE.
+# Set up some folders
+dir.create(here("raw_data"), showWarnings="FALSE")
+```
+
+## Read in oracle passwords and set network directory
+This is a block of code where we set up the oracle passwords and make R aware of folders on the network.
+
+```{r oracle_connections, echo=TRUE, results=FALSE}
+source(here("R_code","project_logistics","R_credentials_RODBC.R"))
+
+# Set the network_location_desktop and network_location_remote variables somewhere OUTSIDE of this code.  The best place to do this is in the .Rprofile or .Renviron files that are in your root directory.  
+
+#Comment one of these out, depending on whether you are running this code on a server or locally (with VPN) 
+net<-network_location_desktop
+net<-network_location_remote
+
+```
+
+
+
+# Purpose
+
+This code extracts DMIS data. 
+
+##  DMIS
+
+
+
+# Load Offshore Wind Tool Data sets 
+
+The frozen DMIS table from the offshoreWind project (APSD_DMIS_2) is the base dataset for the analysis.  The DMIS data are formed by combining many datasets, including VTR and Dealer.  In brief, the APSD_DMIS_2 dataset contains a mix of trip attributes (port, date),  sub-trip attributes (gear, location) , and catch outcomes (species, pounds, landed, dollar).  You can read more about DMIS [here](https://github.com/NEFSC/READ-SSB-Lee-metadata/blob/master/DMIS.md).
+
+
+To get a more up-to-date version of this data, we can do:
+```{r DMIS_live_query, echo=TRUE, eval=extract_switch}
+oracle_server = "sole"
+ODBC.CONNECTION <- RODBC::odbcConnect(dsn=oracle_server, uid=oracle_username, pwd=oracle_password, believeNRows=FALSE)
+#SUBSET.QUERY = paste ("select * FROM APSD.DMIS_WIND_TEST@garfo_nefsc where YEAR=2021")
+CURRENT.QUERY = paste ("select * FROM APSD.DMIS_WIND_TEST@garfo_nefsc")
+APSD_DMIS_WIND_TEST = sqlQuery(ODBC.CONNECTION, CURRENT.QUERY)
+odbcCloseAll()
+summary(APSD_DMIS_WIND_TEST)
+```
+
+
+```{r WIND_TEST_tidyups, echo=TRUE, results=FALSE,eval=extract_switch}
+APSD_DMIS_WIND_TEST <- APSD_DMIS_WIND_TEST %>%
+  mutate("NESPP3" = as.character(NESPP3)) %>%
+  select(-DEALER_RPT_ID)
+
+```
+
+```{r save_dmis_flat, echo=TRUE}
+saveRDS(APSD_DMIS_WIND_TEST, file=here("raw_data",dmis_savename))
+```
+
+
+
+```{r check columns, echo=TRUE, results=TRUE,eval=T}
+#load(file.path(offshoreWind_directory, "APSD_DMIS_2.rda"))
+APSD_DMIS_WIND_TEST<-readRDS(file=here("raw_data",dmis_savename))
+APSD_DMIS <- as_tibble(offshoreWind::APSD_DMIS_2) # load from data/ folder
+
+# List the column names
+sort(colnames(APSD_DMIS_WIND_TEST))
+sort(colnames(APSD_DMIS))
+
+```
+The original has a SPPNAME, but this doesn't exist in WIND_TEST. Not a problem, it looks like it gets dropped.
+
+
+
+
+
+# R Session Information
+```{r session_info, include=TRUE, echo=TRUE, results=TRUE, eval=TRUE}
+sessionInfo()
+Sys.Date()
+
+```
+This may be useful for diagnosing and troubleshooting one day.
+
+
