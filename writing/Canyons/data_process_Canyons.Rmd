@@ -1,0 +1,1072 @@
+
+
+
+ <!---- 
+ The Get_Deflators chunk loads the GDPDEF series from the internet so you can deflate. 
+ --->
+```{r Get_Deflators, include=FALSE, eval=T}
+get_GDP_deflator <- function(time_period = "year", federal_reserve_url = "https://fred.stlouisfed.org/data/GDPDEF.txt"){
+  message("Pulling GDP deflator data from Federal Reserve API ..")
+  # pull from online text file at https://fred.stlouisfed.org/data/GDPDEF.txt
+  temp <- tempfile()
+  temp.connect <- url(federal_reserve_url) # grab GDP deflator from federal reserve API
+  temp <- data.table(read.delim(temp.connect, fill=FALSE, stringsAsFactors=FALSE, skip = 15))
+  temp <- temp %>%
+    tidyr::separate(col= "DATE..........VALUE", into=c("DATE", "GDPDEF"), sep="  ", convert=TRUE)
+  temp$DATE <- as.Date(temp$DATE)
+  temp$GDPDEF <- as.double(temp$GDPDEF)
+  message("Done.")
+
+  if (time_period == "year") {
+    GDPDEF <- temp %>%
+      mutate("DATE" = as.POSIXct(DATE, format="%m/%d/%Y", origin="1970-01-01", tz="America/New_York")) %>% as_tibble() %>%
+      mutate(mon = as.integer(format(DATE,"%m"))) %>%
+      mutate(day = as.integer(format(DATE,"%d"))) %>%
+      mutate(Year = as.integer(format(DATE,"%Y"))) %>%
+      dplyr::select(GDPDEF, Year) %>%
+      dplyr::group_by(Year) %>%
+      dplyr::summarise(GDPDEF = mean(GDPDEF)) %>%
+      ungroup() %>%
+      as_tibble() #  reduce columns
+  } else if(time_period == "quarter") {
+    GDPDEF <- temp %>%
+      mutate(MONTH = as.integer(format(DATE,"%m"))) %>%
+      mutate(day = as.integer(format(DATE,"%d"))) %>%
+      mutate(Year = as.integer(format(DATE,"%Y"))) %>%
+      dplyr::select(GDPDEF, Year, MONTH) %>%  #  reduce to relevant columns
+      mutate(Quarter = "") %>% # Create quarters column
+      mutate(Quarter = ifelse(MONTH %in% 1:3, "Q1", Quarter)) %>%
+      mutate(Quarter = ifelse(MONTH %in% 4:6, "Q2", Quarter)) %>%
+      mutate(Quarter = ifelse(MONTH %in% 7:9, "Q3", Quarter)) %>%
+      mutate(Quarter = ifelse(MONTH %in% 10:12 , "Q4", Quarter)) %>%
+      dplyr::select(GDPDEF, Year, Quarter) %>% as_tibble()
+  } else {
+    stop("Time period not set or not specified as either 'year' or 'quarter' ")
+  }
+  return(GDPDEF)
+}
+GDPDEF_annual <- get_GDP_deflator(time_period = "year")
+GDPDEF_quarterly <- get_GDP_deflator(time_period = "quarter")
+
+
+
+```
+
+
+
+ <!---- 
+ The get_area_overlays chunk loads overlays from getcallArea. It also sets a bunch of options, which are better set in the global_options chunk.  But I'm not going to move it.
+ --->
+
+
+```{r get_area_overlays, eval = T} 
+# Take the overlap files in this code chunk using either an Oracle table or set the filepath to the folder where the .Rdata overlap files are  
+
+###############################################
+###### Set the variables below as needed ######
+###############################################
+
+# --------------------------------------  Comment out wind_area_name when runing create_reports() -------------------------------------- #
+
+# wind_area_name = "OCS-A 0521 Remainder" # used to describe elements in dynamic text and pull wind area name from Oracle - comment out to run multiple reports from create_reports_for_all_areas.R script
+
+# The overlap_data_path is where effert data (dataset with muliplier column) from the last step (the getCallAreaEffort function) is stored - this folder will be used to combine all .rdata files of area effort together - regex will find year range and area names
+
+overlap_data_source = "folder"
+# overlap_data_source = "oracle" 
+
+oracle_overlap_table = "APSD.ALL_WEA_2008_2019@garfo_nefsc.world" #Oracle table to pull overlay files from
+
+
+
+specific_wind_area = FALSE # this is for querying a specific wind area from a folder of multiple wind areas (for automating multiple reports)
+
+run_nybight_test = FALSE # Pull overlays from NY Bight package data to test formatting
+# --------------------------------------------------------------------------------------------------------------------------------------- #
+
+
+# Set Oracle login credentials
+#oracle_username = "bgaluardi"
+#oracle_password = "password"
+#oracle_server = "fso"
+source(here("R_code","project_logistics","R_credentials_RODBC.R"))
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------- #
+# Query lease table from Google Drive?
+query_google_drive_lease_table = FALSE
+
+Gsheet_BOEM_lease_area_table_id = "14MdREhJYjORPkb57n6NYEBSEVxeW3_Studsp0dB8KWc" # this is the id of the google sheet. Find the id of a Googe Sheet using googledrive::drive_find("BOEM Lease Area Table") %>% pull(id)
+
+
+
+Project_Areas_12_3_2019_id = "17auz32s3BYk7K30gT45yUCTQ_hnp_s0i" # Google ID of zip of area shapefiles
+
+if (query_google_drive_lease_table) {
+  formatted_lease_area_table <- read_sheet(Gsheet_BOEM_lease_area_table_id, sheet = "WEA_State_proj_area") %>% drop_na(`proj_area_file_name`) # remove columns without an equivelent name to reduce data readout issues i.e. pulling Lease names with extra NA vectors
+} else {
+  formatted_lease_area_table <- offshoreWind::formatted_lease_area_table # or else use the static table in the package
+}
+
+# --------------------------------------------------------------------------------------------------------------------------------------- #
+# Adding on extra years - for adding an overlay of a particular lease area for any new year(s) outside of 2008-2018 - will use regex to figure out years in folder 
+append_year = FALSE
+additonal_year_overlap_data_path = file.path(network_location, "home5/dcorvi/overlays/All_Lease_Areas_2019_output") # path to folder of overlays for this lease area with any extra years
+
+# Find the file path to the data-raw folder in the package and return error if it cant find it
+raw_data_path = file.path(offshoreWindpath,"data-raw")
+
+area_adjective = "" # The adjective that can be assigned before the word 'area' in the dynamic text - default is blank (e.g. "..most revenue from the areas over the five year analysis.." )
+# area_adjective = "call"
+
+base_year = 2021 # base year for GDP deflator - Maximum = 2020, Minimum = 1947  - max(GDPDEF_quarterly$Year)
+base_quarter = "" # base quarter for GDP deflator e.g. "Q1", "Q2" etc. Maximum = Q1 of 2020, Minimum = Q1 of 1947 - leave blank to query by year
+# base_year <- readline(prompt=paste0("What is the base year for adjusting nominal values to real values? \n\n")) #  *** vignettes dont seem to have the ability to prompt the user
+
+# vtr or dmis data source
+#noaa_data_source = "dmis" # dmis data with clam data join - from 04-06-2020 DMIS table
+noaa_data_source = "dmis2022" # dmis data with clam data join - from 07-07-2022 DMIS query. 
+    # See here("R_code","DMIS_2022_extracting.rmd")
+
+# noaa_data_source = "vtr" # VTR data used in Gerets original script
+# noaa_data_source = "rec" # VTR recreational data
+
+# querying from Oracle for VTR or DMIS data local variables
+dmis_table = "APSD.DMIS_WIND_TEST@GARFO_NEFSC"
+
+
+################################################################################################################################################################
+################################################################################################################################################################
+# Processing inputs...
+# No need to change anything else below
+
+# oracle_server=params$oracle_server # for using with markdown function params
+# oracle_username=params$oracle_username
+# oracle_password=params$oracle_password
+
+# CONN <- odbcConnect(dsn=params$oracle_server, uid=params$oracle_username, pwd=params$oracle_password, believeNRows=FALSE)
+
+# Create Oracle connection if querying from Oracle database
+if (overlap_data_source == "oracle" | query_dmis_table == TRUE | query_rec_table == TRUE | query_permits == TRUE | query_gearids == TRUE) {
+  CONN <- odbcConnect(dsn=oracle_server, uid=oracle_username, pwd=oracle_password, believeNRows=FALSE)
+}
+
+
+# compile area data from output folder of previous step
+# pull in data from previous step (step5 - parallel processing)
+
+#--------------------------------------------------------------------------#
+# Pull overlays from NY Bight package data to test formgatting
+if (run_nybight_test == TRUE  ) {
+  wind_area_name = "NY Bight"
+  inside_areas_combined <- offshoreWind::NYBIGHT_inside_areas_c
+  MGAREA <- unique(inside_areas_combined$Area)
+  proj_area_name = "NY Bight"
+} else {
+#--------------------------------------------------------------------------#
+
+#--------------------------------------------------------------------------#
+# Pull overlay data from Oracle
+
+# if (exists("oracle_overlap_table")) {
+if (overlap_data_source == "oracle") {
+  
+  # CONN <- RODBC::odbcConnect(dsn=oracle_server, uid=oracle_username, pwd=oracle_password, believeNRows=FALSE)
+  # sqlQuery(CONN, paste0("select distinct(AREA) FROM apsd.all_wea_2011_2018@garfo_nefsc.world;"))
+  
+  ptm.areaQuery = Sys.time()
+  # inside_areas_combined <- sqlQuery(CONN, paste0("select * FROM apsd.all_wea_2011_2018@garfo_nefsc.world WHERE AREA = '", wind_area_name, 
+  #                                                "' AND YEAR >= ",min_year," AND YEAR <= ", max_year,";"))
+  
+  wind_area_name_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("-","_", wind_area_name)), perl=TRUE)
+  
+  if (length(wind_area_name) > 1) { # pull multiple areas if wind_area_name contains more than 1 vector  
+    sql_part_1 <- str_c("SELECT * FROM ", oracle_overlap_table, " WHERE AREA = '", wind_area_name[1])
+    sql_part_2 <- str_c(" AND AREA = '", wind_area_name[-1], collapse="")
+    query_string <- str_c(sql_part_1, sql_part_2, "';", collapse="")
+    inside_areas_combined <- sqlQuery(CONN, query_string)
+  } else {
+      inside_areas_combined <- sqlQuery(CONN, str_c("select * FROM ", oracle_overlap_table, " WHERE AREA = '", wind_area_name,"';"))
+    }
+  
+  message(paste0("Run time for areas query: ", as.double(round(difftime(Sys.time(), ptm.areaQuery, units='secs'), 2))%/%60," minute(s) ",as.double(round(difftime(Sys.time(), ptm.areaQuery, units='secs'), 2))%%60," second(s)"))
+  
+  inside_areas_combined <- inside_areas_combined %>%
+    dplyr::select(c("IDNUM", "AREA", "YEAR", "INSIDE")) %>% 
+    dplyr::rename("Area" = AREA, "Year" = YEAR, "Inside" = INSIDE) %>% 
+    mutate("Area" = as.character(Area)) %>%
+    mutate("Area" = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", Area), perl=TRUE)) %>% 
+    mutate("Area" = gsub("/","-", Area)) 
+  
+  if (append_year == TRUE) {
+    
+    if (any(list.files(additonal_year_overlap_data_path, pattern = paste0(wind_area_name_underscore, ".*\\.RData$")) %>% str_replace(paste0("(.+)_(","\\d{4})", "(.RData)"), "\\1") %in% wind_area_name_underscore) == FALSE) {
+      stop("The ", wind_area_name, " wind area does not exist in extra years folder..")
+    }
+    
+    all_years <- list.files(additonal_year_overlap_data_path, pattern = paste0(wind_area_name_underscore, ".*\\.RData$")) %>% str_replace(paste0("(.+)_(","\\d{4})", "(.RData)"), "\\2")
+      for (extra_year in all_years) {
+        load(paste0(additonal_year_overlap_data_path, "/", wind_area_name_underscore, "_", extra_year, ".RData", sep = '')) # load extra year as ACTIVITY
+        YEAR.AREA <- subset(ACTIVITY, select=c(IDNUM,Area,Year,Inside)) %>% 
+          mutate("Area" = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", Area), perl=TRUE))
+        YEAR.AREA <- YEAR.AREA[which(YEAR.AREA$Inside!=0),]
+        YEAR.AREA$Inside <- as.numeric(as.character(YEAR.AREA$Inside))
+        inside_areas_combined <- rbind(inside_areas_combined, YEAR.AREA)
+        rm(ACTIVITY,YEAR.AREA) # garbage collection
+      }
+  }
+  
+  odbcClose(CONN)
+  
+  #### detect names of areas from combined areas file - double check
+  MGAREA <- unique(inside_areas_combined$Area)
+  
+  #### Update wind area names
+  # ----- I placed the line below in the load libraries chunk because it prompts the user to sign into Google in the middle of the chunk run -----#
+  # formatted_lease_area_table <- read_sheet(Gsheet_BOEM_lease_area_table_id, sheet = "WEA_State_proj_area") %>% drop_na(`proj_area_file_name`) # remove columns without an equivelent name to reduce data readout issues i.e. pulling Lease names with extra NA vectors  
+  
+  if (wind_area_name %in% formatted_lease_area_table$proj_area_file_name) {
+    proj_area_name <- wind_area_name
+    # wind_area_name <- proj_area_file_name
+    wind_area_name <- formatted_lease_area_table %>% 
+      filter(proj_area_file_name==wind_area_name) %>% 
+      pull(`Lease Name`) # get the reformatted wind area name using the mapped project area file name
+    inside_areas_combined <- inside_areas_combined %>%
+      mutate("Area" = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", wind_area_name), perl=TRUE)) %>%
+      mutate("Area" = gsub("/","-", Area))
+    }
+  #### end Update wind area names
+  # inside_areas_combined <- inside_areas_combined %>% filter( Year < 2019 & Year >= 2014 ) # set for testing
+  # sort(unique(inside_areas_combined$Year))
+  # sort(unique(inside_areas_combined %>% filter( Year < 2019 & Year >= 2014 ) %>% select(Year)) %>% pull())
+
+} # end conditional for checking for overlaps Oracle table
+#--------------------------------------------------------------------------#
+
+
+#--------------------------------------------------------------------------#
+# Pull overlays from Folder
+# if (exists("overlap_data_path")) {
+if (overlap_data_source == "folder") {
+  
+###### get info to be able to loop over overlap file ######
+# get areas from overlap_data_path 
+MGAREA <- unique(gsub(pattern="(.+)_([0-9]{4})(.RData$)","\\1", ignore.case = TRUE , list.files(path=overlap_data_path, pattern = "(.+)(.RData$)", ignore.case =TRUE, recursive=F, full.names=F)))
+
+years <- unique(gsub(pattern="(.+)_([0-9]{4})(.RData$)","\\2", ignore.case = TRUE , list.files(path=overlap_data_path, pattern = "(.+)(.RData$)", ignore.case =TRUE, recursive=F, full.names=F))) # get years from overlap_data_path
+
+START.YEAR <- min(as.numeric(years))
+END.YEAR <-  max(as.numeric(years))
+rm(years)
+
+if (any(gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", MGAREA), perl=TRUE) %in% formatted_lease_area_table$proj_area_file_name)) {
+  
+  if (specific_wind_area) {
+  MGAREA <- MGAREA[MGAREA %in% gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("-","_", wind_area_name)), perl=TRUE)]
+  years <- unique(gsub(pattern="(.+)_([0-9]{4})(.RData$)","\\2", ignore.case = TRUE, list.files(path=overlap_data_path, pattern = paste0(MGAREA, "_([0-9]{4})(.RData$)"), ignore.case =TRUE, recursive=F, full.names=F))) # get years from overlap_data_path
+  START.YEAR <- min(as.numeric(years))
+  END.YEAR <-  max(as.numeric(years))
+  rm(years)
+}
+  
+  proj_area_name = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", gsub("OCS_A","OCS-A", MGAREA)), perl=TRUE)
+  
+  wind_area_name <- formatted_lease_area_table %>% # set wind area name as proper lease name
+  filter(proj_area_file_name==proj_area_name) %>% 
+  pull(`Lease Name`)
+  
+} else {
+  proj_area_name <- wind_area_hard_name 
+  wind_area_name <- wind_area_hard_name
+}
+
+# MGAREA <- gsub(pattern=".shp$","", ignore.case = TRUE ,
+#      list.files(path=shapefile_f,ignore.case =TRUE, pattern="shp$", recursive=F, full.names=F))
+# need to move this to getCallAreaEffort function
+# MGAREA <- gsub(pattern=" ","_", gsub(pattern="-","_", MGAREA))
+
+# get static file all inside trip area data that was created in overlap file 
+test=1
+for (YEAR in START.YEAR:END.YEAR) {
+  for (AREA in MGAREA){
+    load(paste0(overlap_data_path, "/",AREA,"_",YEAR,".RData", sep = ''))
+    if (test == 1) {
+      inside_areas_combined <- subset(ACTIVITY, select=c(IDNUM,Area,Year,Inside))
+      inside_areas_combined$Inside <- as.numeric(as.character(inside_areas_combined$Inside))
+      inside_areas_combined <- inside_areas_combined[which(inside_areas_combined$Inside!=0),]
+      inside_areas_combined$Inside <- as.numeric(as.character(inside_areas_combined$Inside))
+      rm(ACTIVITY) # garbage collection
+      test = 2
+    }
+    else {
+      YEAR.AREA <- subset(ACTIVITY, select=c(IDNUM,Area,Year,Inside))
+      YEAR.AREA <- YEAR.AREA[which(YEAR.AREA$Inside!=0),]
+      YEAR.AREA$Inside <- as.numeric(as.character(YEAR.AREA$Inside))
+      inside_areas_combined <- rbind(inside_areas_combined, YEAR.AREA)
+      rm(ACTIVITY,YEAR.AREA) # garbage collection
+    }
+  }
+} # end for loop for getting overlap data from folder
+  #### Update wind area names
+  if (specific_wind_area) {
+inside_areas_combined <- inside_areas_combined %>%
+      mutate("Area" = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", wind_area_name), perl=TRUE)) %>%
+      mutate("Area" = gsub("/","-", Area))
+} else {
+    inside_areas_combined <- inside_areas_combined %>%
+       # make spaces underscores and
+      # mutate("Area" = gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", Area)), perl=TRUE))
+      mutate("Area" = gsub("/","-", gsub(" ","_", gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", Area), perl=TRUE))))
+}
+} # end conditional for checking for overlaps folder
+} # end conditional for testing for running NY Bight test run 
+#--------------------------------------------------------------------------#
+
+#### detect Start and end years from combined areas file
+START.YEAR = as.integer(min(inside_areas_combined$Year))
+END.YEAR = as.integer(max(inside_areas_combined$Year))
+
+numyear <- offshoreWind::proper(offshoreWind::numbers2words(as.integer(length(START.YEAR:END.YEAR))))
+
+# set global variables to lowercase for better compatibility
+noaa_data_source <- tolower(noaa_data_source)
+save_files = tolower(save_files)
+
+message(ifelse(save_files == "b", "Saving .csv and .rdata files..", ifelse(save_files == "c", "Saving .csv files..", 
+       ifelse(save_files == "r", "Saving .rdata files..", ifelse(save_files == "n", "Not saving any table files..","No save method specified")))))
+
+message("Creating PDF using demonstration data of ", paste0(MGAREA, collapse = ", ")," areas..", appendLF = TRUE)
+message("Using ", toupper(noaa_data_source), " data..", appendLF = TRUE)
+
+deflate_by <- if_else(base_quarter == "" , "year", "quarter") # set whether to deflate revenue by quarter or year - default is quarter - this is done in the adjust_nominal_values_to_real_values code chunk
+
+# Add space after area adjective if it is used and if there isnt a space in there already
+area_adjective <- ifelse(area_adjective!= "" && str_sub(area_adjective,-1,-1) != " " , paste0(area_adjective," "), area_adjective)
+
+# check what article the adjective needs - "an" if no adjective or if the adjective begin with an 'a' 
+a_or_an <- ifelse(area_adjective == "" || tolower(substr(area_adjective, start = 1, stop = 1)) == "a", " an ", " a ")
+
+# Mistype Error Checking:
+if ((base_year %in% 1947:2021 == FALSE)) {stop("Base year not between 2020 and 1947 or not given..")}
+if ((base_quarter %in%  c("Q1", "Q2", "Q3", "Q4", "") == FALSE)) {stop("Base Quarter not written as Q1, Q2, Q3, Q4..")}
+if (deflate_by == "year") {message("Deflating by ", base_year, " dollars..")}
+if (deflate_by == "quarter") {message("Deflating by ", base_year, ", ", base_quarter, " dollars..")}
+
+# Setup more helpful error messages
+if (rlang::is_empty(MGAREA)) {stop("Didn't, detect any areas. Check that the overlay data is in the ",overlap_data_path," folder.")}
+
+# more helpul connection errors
+if (overlap_data_source == "oracle" | query_dmis_table == TRUE | query_rec_table == TRUE | query_permits == TRUE | query_gearids == TRUE) {
+  if (CONN==-1) {stop("Not connected to VPN") # conn equals -1 if not connected to vpn
+  }
+}
+if (overlap_data_source == "folder") {
+  if (!dir.exists(additonal_year_overlap_data_path) | !dir.exists(overlap_data_path)) {
+  stop("Not connected to shared drive or overlap_data_path or additonal_year_overlap_data_path folder doesn't exist") # checks that the overlap path exists to see if the user has entered the password for the shared drive
+  }
+}
+
+
+number_of_areas <- length(MGAREA)
+
+
+
+
+message("Running lease area(s): ", paste0(wind_area_name, collapse = ", "), ", Project Area(s): ", paste0(proj_area_name, collapse = ", ")," ..")
+
+ptm.SCRIPT = Sys.time() #bench marking
+
+# inside_areas_combined_empire_wind_oracle <- inside_areas_combined
+# inside_areas_combined_empire_wind_folder <- inside_areas_combined
+# offshoreWind::formatted_lease_area_table$proj_area_file_name
+
+# MGAREA
+
+
+```
+
+ <!----  The create_connection_if_querying chunk creates an ODBC connection usion RODBC. --->
+```{r create_connection_if_querying, eval = eval_create_connection}  
+# this should stop errors from occuring in the case that Oracle credentials are not changed from defaults 
+
+  CONN <- RODBC::odbcConnect(dsn=oracle_server, uid=oracle_username, pwd=oracle_password, believeNRows=FALSE)
+
+
+```
+ <!---- 
+ The query_DMIS_or_REC_if_requested chunk gets data from DMIS or from VTR for REC
+ --->
+```{r query_DMIS_or_REC_if_requested, eval = eval_query_DMIS_or_REC} 
+########################################
+##### Query DMIS table from Oracle #####
+########################################
+### load dmis manually from Oracle instead of from flat file to ensure data is up-to-date - may take up to 17 hours on the VPN 
+
+if (noaa_data_source == "dmis") {
+  message("Querying DMIS data from Oracle..")
+  ptm.DMISQuery = Sys.time()
+  APSD_DMIS_2 <- sqlQuery(CONN, paste0("SELECT * FROM ", dmis_table, " WHERE Year >= ",
+                                                  START.YEAR, " AND Year <= ", END.YEAR))
+  message(paste0("Run time for DMIS query: ", as.double(round(difftime(Sys.time(), ptm.DMISQuery, units='secs'), 2))%/%60," minute(s) ",as.double(round(difftime(Sys.time(), ptm.DMISQuery, units='secs'), 2))%%60," second(s)"))
+
+  
+}
+
+########################################
+##### Query REC table from Oracle #####
+########################################
+### load rec manually from Oracle instead of from flat file to ensure data is up-to-date - may take a long time on the VPN 
+if (noaa_data_source == "rec") {
+  ptm.RECQ = Sys.time()
+  # get vtr data for recreational
+for(i in START.YEAR:END.YEAR) {
+  print(i)
+  CURRENT.QUERY = paste("SELECT VTR.veslog",i,"s.TRIPID,
+        				VTR.veslog",i,"t.DATESAIL,
+                (to_date(VTR.veslog",i,"t.DATELND1)-to_date(VTR.veslog",i,"t.DATESAIL))+1 as DAS,
+        				VTR.veslog",i,"t.TRIPCATG,
+        				VTR.veslog",i,"t.PORTLND1,
+        				VTR.veslog",i,"t.STATE1,
+        				VTR.VLPORTSYN.PORT,
+        				VTR.veslog",i,"t.HULLNUM as VESID,
+        				VTR.veslog",i,"g.GEARCODE,
+        				VTR.vlgear.GEARNM,
+        				VTR.veslog",i,"s.QTYKEPT,
+                VTR.veslog",i,"s.QTYDISC,
+        				VTR.VLSPPSYN.SPPCONV,
+                VTR.veslog",i,"s.SPPCODE,
+        				VTR.VLSPPSYN.NESPP3,
+        				VTR.veslog",i,"g.FZONE,
+                VTR.veslog",i,"g.CAREA as AREA,
+        				VTR.veslog",i,"g.CLATDEG,
+        				VTR.veslog",i,"g.CLATMIN,
+        				VTR.veslog",i,"g.CLATSEC,
+        				VTR.veslog",i,"g.CLONDEG,
+        				VTR.veslog",i,"g.CLONMIN,
+        				VTR.veslog",i,"g.CLONSEC,
+        				VTR.veslog",i,"g.SERIAL_NUM,
+                VTR.veslog",i,"g.GEARID
+        				FROM VTR.veslog",i,"s
+        				LEFT JOIN VTR.veslog",i,"g ON VTR.veslog",i,"s.GEARID = VTR.veslog",i,"g.GEARID
+        				LEFT JOIN VTR.veslog",i,"t ON VTR.veslog",i,"s.TRIPID = VTR.veslog",i,"t.TRIPID
+        				LEFT JOIN VTR.vlgear ON VTR.veslog",i,"g.GEARCODE = VTR.vlgear.GEARCODE
+        				LEFT JOIN VTR.VLSPPSYN ON VTR.veslog",i,"s.SPPCODE = VTR.VLSPPSYN.SPPSYN
+        				LEFT JOIN VTR.VLPORTSYN ON VTR.veslog",i,"t.PORTLND1 = VTR.VLPORTSYN.PORTSYN AND VTR.veslog",i,"t.STATE1 = VTR.VLPORTSYN.STATEABB
+                WHERE VTR.veslog",i,"t.TRIPCATG in(2,3)
+        				ORDER BY VTR.veslog",i,"t.DATESAIL",sep="")
+  YEAR.RESULT = sqlQuery(CONN, CURRENT.QUERY)  ### seems to be a problem with having a "paste" on both sides...
+
+  # Now, the loop compiles the results; the first year must be treated slightly differently###
+  if (i==START.YEAR) {
+    RESULT.COMPILED = YEAR.RESULT
+  } else {
+    RESULT.COMPILED = rbind(RESULT.COMPILED, YEAR.RESULT) }
+}    # End Main Loop
+
+VTR_REC <- as_tibble(RESULT.COMPILED) # dplyr::rename data to be more explicit
+
+VTR_REC <- VTR_REC %>% # fix data
+  dplyr::rename("IDNUM" = GEARID) %>%
+  mutate(YEAR = as.integer(format(DATESAIL,"%Y"))) %>% # create column for year
+  mutate(MONTH = as.integer(format(DATESAIL,"%m"))) %>% # create column for month
+  mutate("LAT" = angle2dec(paste0(VTR_REC$CLATDEG, " ", VTR_REC$CLATMIN, " ", VTR_REC$CLATSEC))) %>%
+  mutate("LON" = angle2dec(paste0(VTR_REC$CLONDEG, " ", VTR_REC$CLONMIN, " ", VTR_REC$CLONSEC))) %>%
+  mutate("PORTLANDED" = paste0(PORTLND1,", ",STATE1)) %>%
+  mutate("NESPP3" = as.integer(NESPP3)) %>%
+  mutate("LIVE" = QTYKEPT * SPPCONV) %>%
+  left_join(x = ., y = SPECIES, by = "NESPP3") %>% # join species names by NESPP3 from previously created csv file saved as flat file in data/
+  mutate("FMP" = Formatted_2) %>% # fix formatting for FMPs
+  dplyr::select(-Formatted_2) %>%
+  mutate("FMP" = if_else(FMP=="","None", FMP))
+  
+  message(paste0("Run time for recreation data query and clean: ", as.double(round(difftime(Sys.time(), ptm.RECQ, units='secs'), 2))%/%60," minute(s) ",as.double(round(difftime(Sys.time(), ptm.RECQ, units='secs'), 2))%%60," second(s)"))
+}
+
+
+```
+
+
+ <!----  The query_gearids_permits_if_requested chunk gets up to date gearid or permit level info. --->
+```{r query_gearids_permits_if_requested, results='hide', eval = eval_query_gearids_permits}  
+ 
+  # ##### option 2 - Query from database 
+  # CONN = odbcConnect(dsn="sole",uid="dcorvi",pwd="pw",believeNRows=FALSE)
+  # query missing data from Oracle (should take about 2.5 minutes on VPN) and will join in next code block  
+  ptm.TOTAL = Sys.time()
+  E_Y <- END.YEAR+1
+  QUERY_RESULT<-NULL
+  for(i in START.YEAR:E_Y) {
+    ptm.TOT = Sys.time()
+    print(i)
+    if (noaa_data_source == "vtr") { # get permit variable from Oracle
+    CURRENT.QUERY = paste("SELECT unique PERMIT,
+                          TRIPID FROM VTR.veslog",i,"t ;"
+                          , sep="") } 
+    else if (noaa_data_source %in% c("dmis", "dmis2022")) { # get gearid variable from Oracle
+    CURRENT.QUERY = paste("SELECT SERIAL_NUM, GEARID,
+                          TRIPID FROM VTR.veslog",i,"g ;" # GEARID is equilivent to IMGID - from data dictionary: GEARID:VESLOG Gear record identifier; Primary key for VESLOGyyyyG. Equivalent to IMGID in VTR IMAGES table
+                          , sep="") # stringsAsFactors = FALSE
+    }
+    # TODO: change RESULT.COMPILED object name bc it is masked by native rstudio methods
+    YEAR.RESULT = sqlQuery(CONN, CURRENT.QUERY, stringsAsFactors=FALSE)  ### seems to be a problem with having a "paste" on both sides...
+    YEAR.RESULT$YEAR_L <- i
+    QUERY_RESULT = rbind(QUERY_RESULT,YEAR.RESULT)
+    # Print the results summary:
+    print(paste("For year ",i,", ",(NROW(YEAR.RESULT))," records were added.",sep=""))
+    print(paste0("After adding year ",i,", total records imported = ", NROW(QUERY_RESULT),"."))
+    print(paste0("Run time ",round(difftime(Sys.time(), ptm.TOT, units='secs'), 2), " seconds for ",i))
+  }    # End Main Loop
+  QUERY_RESULT <- QUERY_RESULT %>% 
+    dplyr::rename("IDNUM" = GEARID, "TRIPID_check" = TRIPID) %>% 
+    mutate(SERIAL_NUM = as.character(SERIAL_NUM)) %>%
+    select(-YEAR_L)# remove year variable
+
+  print(paste0("Run time ", round(difftime(Sys.time(), ptm.TOTAL, units='secs'), 2), " seconds for ",START.YEAR," to ",E_Y))
+
+  odbcClose(CONN) # garbage collection
+
+```
+
+
+
+
+
+ <!----  The load_VTR_REC_or_DMIS_flat_files_and_clean chunk reads in VTR/DMIS data and tidies it up. This is where the FIN dataset is create and FIN_backup is created. --->
+```{r load_VTR_REC_or_DMIS_flat_files_and_clean, eval = T}  
+# run this code chunk to query from Oracle or use in-package data - querying from Oracle takes longer but ensures that everything is up-to-date    
+# also renames and cleans DMIS variables and data   
+ 
+#### load data for VTR and filter by years
+if (noaa_data_source == "vtr") { 
+  message("Loading flat VTR file from package..")
+  VTR_FIN <- offshoreWind::VTR_FIN # not needed but keeps code explicit 
+  message("VTR observations for all years: ", format(NROW(VTR_FIN), big.mark=",", scientific=FALSE))
+  VTR_FIN <- VTR_FIN[ which(VTR_FIN$YEAR >= START.YEAR & VTR_FIN$YEAR <= END.YEAR),] # subset by selected years
+  message(START.YEAR, " to ", END.YEAR, " VTR observations: ", format(NROW(VTR_FIN),big.mark=",",scientific=FALSE))
+}
+
+if (noaa_data_source == "rec") {
+  message("Loading flat VTR recreation file from package..")
+  VTR_REC <- offshoreWind::VTR_REC # not needed but keeps code explicit 
+  message("VTR observations for all years: ", format(NROW(VTR_REC), big.mark=",", scientific=FALSE))
+  VTR_REC <- VTR_REC[ which(VTR_REC$YEAR >= START.YEAR & VTR_REC$YEAR <= END.YEAR),] # subset by selected years
+  message(START.YEAR, " to ", END.YEAR, " VTR observations: ", format(NROW(VTR_REC),big.mark=",",scientific=FALSE))
+}
+
+##### load data for DMIS filter by years
+
+if (noaa_data_source == "dmis" && query_dmis_table == FALSE) {
+  message("Loading flat DMIS file from package..")
+  APSD_DMIS <- as_tibble(offshoreWind::APSD_DMIS_2) # load from data/ folder
+  message("DMIS observations for all years: ", format(NROW(APSD_DMIS), big.mark=",", scientific=FALSE))
+  APSD_DMIS <- APSD_DMIS[ which(APSD_DMIS$YEAR >= START.YEAR & APSD_DMIS$YEAR <= END.YEAR),] # subset by selected years
+  message(START.YEAR, " to ", END.YEAR, " DMIS observations: ", format(NROW(APSD_DMIS),big.mark=",",scientific=FALSE))
+}
+
+
+if (noaa_data_source == "dmis2022" && query_dmis_table == FALSE) {
+  message("Loading flat DMIS file from previous DMIS query.  See DMIS_2022_extracting.rmd")
+  APSD_DMIS <- readRDS(dmis2022_infile)
+  message("DMIS observations for all years: ", format(NROW(APSD_DMIS), big.mark=",", scientific=FALSE))
+  APSD_DMIS<-APSD_DMIS %>%
+    mutate(NESPP3= as.numeric(NESPP3))%>%
+    mutate(NESPP3 = replace_na(NESPP3, 0)) %>%
+    mutate(NESPP3=sprintf("%03.0f",NESPP3))
+  APSD_DMIS <- APSD_DMIS[ which(APSD_DMIS$YEAR >= START.YEAR & APSD_DMIS$YEAR <= END.YEAR),] # subset by selected years
+  message(START.YEAR, " to ", END.YEAR, " DMIS observations: ", format(NROW(APSD_DMIS),big.mark=",",scientific=FALSE))
+}
+
+
+
+
+
+
+#### change dmis variables to vtr variables and join tables with need variables ####
+# save(APSD_DMIS, file="APSD_DMIS.rData")
+
+# write.csv(APSD_DMIS, file="APSD_DMIS.csv")
+
+# offshoreWind::VTR_FIN
+
+
+# VTR_FIN <- offshoreWind::VTR_FIN %>% # fix data
+#   # dplyr::rename("IDNUM" = GEARID) %>%
+#   mutate(FY = as.integer(format(DATESAIL,"%Y"))) %>% # create column for year
+#   mutate(MONTH = as.integer(format(DATESAIL,"%m"))) %>% # create column for month
+#   mutate("PORTLANDED" = paste0(PORTLND1,", ",STATE1)) %>%
+#   mutate("NESPP3" = as.integer(NESPP3)) %>%
+#   mutate("LIVE" = QTYKEPT * SPPCONV) %>%
+#   left_join(x = ., y = SPECIES, by = "NESPP3") %>% # join species names by NESPP3 from previously created csv file saved as flat file in data/
+#   mutate("FMP" = Formatted_2) %>% # fix formatting for FMPs
+#   dplyr::select(-Formatted_2) %>%
+#   mutate("FMP" = if_else(FMP=="","None", FMP))
+
+
+# remap dmis variables to vtr variables when dmis data source is requested
+# TODO: find-replace vtr variables to dmis variables when code is 100% functional
+# DMIS missong HULLNUM variable? HULLNUM as VESID
+# add gearids from VESLOGyyyyG Oracle table by SERIAL_NUM in next code chunk
+# sum(is.na(APSD_DMIS$DAS)) # count NA's
+
+# APSD_DMIS_2 <- offshoreWind::APSD_DMIS_2 # reset data
+# as_tibble(APSD_DMIS)
+# as_tibble(APSD_DMIS_2)
+#### DMIS dataste 2
+
+# as_tibble(APSD_DMIS)
+
+# SPECIES <- offshoreWind::SPECIES[,1:3] #change back to original FMPs without formatting
+
+# SPECIES <- offshoreWind::SPECIES %>% mutate(Formatted_2 = ifelse(NESPP3==710, "No Federal FMP", Formatted_2))
+
+# Note: cannot determine days at sea with dmis/clam data
+
+    if (noaa_data_source %in% c("dmis","dmis2022")) { #new dmis table with imgids
+      ptm.DMIS = Sys.time()
+      #MODIFY SPECIES
+      SPECIES_CUSTOM<-offshoreWind::SPECIES %>%
+        mutate(FMP=replace(FMP, NESPP3 %in% c("727","711"), "American Lobster")) %>% #Lob + Jonah separate 
+        mutate(FMP=replace(FMP, NESPP3 %in% c("710"), "Red Crab")) #Red Crab
+
+
+    APSD_DMIS <- as_tibble(
+      APSD_DMIS %>%
+        dplyr::select(-c("GEARCODE")) %>% # remove columns with wrong names
+        dplyr::rename("IDNUM"=IMGID, "PORTLND1"=VTR_PORT, "STATE1"=VTR_STATE, "DATESAIL"=DATE_TRIP, "GEARCODE"=SECGEARFISH,"REVENUE"=DOLLAR, "LIVE"=POUNDS, "QTYKEPT"=LANDED, "LAT"=DDLAT, "LON"=DDLON, "DAS"=TRIP_LENGTH) %>%
+        mutate("MONTH" = as.integer(format(DATESAIL,"%m"))) %>% # create column for month
+        mutate("PORTLANDED" = paste0(PORTLND1,", ",STATE1)) %>%
+        left_join(x = ., y = SPECIES_CUSTOM, by = "NESPP3") %>% # join species names by NESPP3 from previously created csv file saved as flat file in data/
+        mutate("NESPP3" = as.integer(NESPP3)) %>%
+        mutate("FMP" = if_else(FMP=="","None", FMP)) %>% #rename blank FMPs
+        mutate("FMP" = if_else(is.na(FMP),"All Others", FMP)) %>% # fix missing data for species codes, FMPs and code to species mapping
+        mutate("SPPNM" = if_else(is.na(SPPNM) & is.na(NESPP3), "UNKNOWN", SPPNM)) %>%
+        left_join(x = ., y = subset(offshoreWind::VLGEARTABLE, select=c(GEARCODE, GEARNM)), by = "GEARCODE") #add gearnames from VLGEAR table (saved as flat file from Oracle)
+      )
+      message(paste0("Run time for variable replacement and joins in DMIS table: ", as.double(round(difftime(Sys.time(), ptm.DMIS, units='secs'), 2))%/%60," minute(s) ",as.double(round(difftime(Sys.time(), ptm.DMIS, units='secs'), 2))%%60," second(s)"))
+    }
+
+
+# sort(unique(APSD_DMIS %>% filter(is.na(FMP)) %>% pull(NESPP3))) %notin% SPECIES$NESPP3
+  
+
+# sapply(APSD_DMIS_2, function(x) sum(is.na(x))) # check NAs
+# sapply(APSD_DMIS, function(x) comma_format()(sum(is.na(x)))) # check NAs
+# 
+# comma_format()(nrow(APSD_DMIS_2))
+# comma_format()(nrow(APSD_DMIS))
+# colnames(APSD_DMIS_2)
+
+# rm(APSD_DMIS)
+# library(readr)
+# write_csv(tibble::enframe((unique(APSD_DMIS_2$SPPNAME)),name = NULL), "speciescheck.csv")
+
+#### Get finished flat files of gears and species joined VTR REC or DMIS data ####
+if (noaa_data_source == "vtr") {
+  FIN <- VTR_FIN
+} else if (noaa_data_source == "rec" ) {
+  FIN <- VTR_REC
+} else if (noaa_data_source %in% c("dmis","dmis2022")) {
+  FIN <- APSD_DMIS
+} else {
+  stop("please enter data source..")
+}
+
+#### save raw data of years requested
+# if (save_files == "r" | save_files == "b" ) {
+#   message("saving raw data..")
+#   save(FIN, file=file.path(output_f, paste(project_name, "_RAW.Rdata",sep="")))
+# }
+
+#### if not querying from Oracle, get flat files and filter by the years requested 
+if (query_gearids == FALSE | query_permits == FALSE) {
+  if (noaa_data_source == "vtr" || noaa_data_source == "rec" ) {
+    QUERY_RESULT <- offshoreWind::PERMIT_QUERY
+  } else if (noaa_data_source %in% c("dmis","dmis2022")){
+    QUERY_RESULT <- offshoreWind::GEARID_QUERY
+    # QUERY_RESULT <- QUERY_RESULT %>% rename("IDNUM" = GEARID, "TRIPID_check" = TRIPID) %>% mutate(SERIAL_NUM = as.character(SERIAL_NUM)) 
+    QUERY_RESULT <- QUERY_RESULT %>% 
+      dplyr::rename("IDNUM" = GEARID) %>% 
+      mutate(SERIAL_NUM = as.character(SERIAL_NUM)) 
+    QUERY_RESULT <- QUERY_RESULT[ which(QUERY_RESULT$YEAR_L >= START.YEAR & QUERY_RESULT$YEAR_L <= END.YEAR+1),]
+  }
+}
+
+# unique(select_gear_codes  %>% filter(gearcat_new=="[blank]") %>% select(GEARCODE))
+
+FIN_backup <- FIN
+```
+
+
+
+
+ <!----  The process_permit_data chunk tidies up some columns and creates REVENUEFILE.  This takes a little while. --->
+```{r process_permit_data, eval = T} 
+# FIN <- FIN_backup # for resets
+
+QUERY_RESULT$YEAR_L <- NULL # remove year variable
+
+FIN$GEARCAT <- ""
+FIN$GEARCAT[FIN$GEARNM=="POT, LOBSTER"] <- "Lobster Pot"
+FIN$GEARCAT[FIN$GEARNM %in% c("OTTER TRAWL, BOTTOM,FISH","OTTER TRAWL, BEAM","OTTER TRAWL, BOTTOM,OTHER", "OTTER TRAWL,BOTTOM,TWIN",
+                                  "SEINE, DANISH","SEINE, SCOTTISH","PAIR TRAWL, BOTTOM") ] <- "Bottom Trawl"
+FIN$GEARCAT[FIN$GEARNM=="GILL NET, SINK"] <- "Sink Gillnet"
+FIN$GEARCAT[FIN$GEARNM %in% c("DREDGE, SCALLOP,SEA","DREDGE, SCALLOP-CHAIN MAT","DREDGE,SCALLOP,TURTLE DEFLECT",
+                                  "DREDGE, SCALLOP,CHAIN MAT,MOD","OTTER TRAWL, BOTTOM,SCALLOP")] <- "Scallop Gear"
+FIN$GEARCAT[FIN$GEARNM=="DREDGE, OCEAN QUAHOG/SURF CLAM"] <- "Clam Dredge"
+FIN$GEARCAT[FIN$GEARNM=="OTTER TRAWL, BOTTOM,SHRIMP"] <- "Shrimp Trawl"
+FIN$GEARCAT[FIN$GEARNM %in% c("DREDGE, URCHIN","DREDGE, OTHER")] <- "Other Dredge"
+FIN$GEARCAT[FIN$GEARNM %in% c("DREDGE, MUSSEL")] <- "Mussel Dredge"
+FIN$GEARCAT[FIN$GEARNM %in% c("HAND LINE/ROD & REEL","HARPOON")] <- "Hand Gear"
+FIN$GEARCAT[FIN$GEARNM=="LONGLINE, BOTTOM"] <- "Bottom Longline"
+FIN$GEARCAT[FIN$GEARNM %in% c("POT, HAG","POT, CRAB","POT, FISH", "POT, CONCH/WHELK", "POT, SHRIMP","POT, OTHER",
+                                  "TRAP","POT, EEL","POTS, MIXED")] <- "Other Pot"
+FIN$GEARCAT[FIN$GEARNM %in% c("OTTER TRAWL, MIDWATER","PAIR TRAWL, MIDWATER")] <- "Midwater Trawl"
+FIN$GEARCAT[FIN$GEARNM %in% c("OTTER TRAWL, HADDOCK SEPARATOR","OTTER TRAWL, RUHLE")] <- "Separator & Ruhle Trawl"
+FIN$GEARCAT[FIN$GEARNM %in% c("GILL NET, DRIFT,LARGE MESH","GILL NET, DRIFT,SMALL MESH")] <- "Drift Gillnet"
+FIN$GEARCAT[FIN$GEARNM %in% c("FYKE NET","OTHER GEAR", "HAND RAKE", "DIVING GEAR","SEINE, STOP","WEIR","CARRIER VESSEL",
+                                  "MIXED GEAR","CASTNET","SEINE,HAUL")] <- "Other Gear"
+FIN$GEARCAT[FIN$GEARNM=="LONGLINE, PELAGIC"] <- "Pelagic Longline"
+FIN$GEARCAT[FIN$GEARNM=="SEINE, PURSE"] <- "Purse Seine"
+FIN$GEARCAT[FIN$GEARNM %in% c("GILL NET, OTHER","GILL NET, RUNAROUND")] <- "Other Gillnet"
+FIN$GEARCAT[FIN$GEARCAT==""] <- "Other Gear"
+FIN$GEARCAT[which(is.na(FIN$GEARCAT))] <- "Other Gear"
+
+if (noaa_data_source %in% c("vtr","rec")) {
+QUERY_RESULT <- unique(QUERY_RESULT)
+TEST_1 <- NROW(FIN)
+message("Merging data from step 2 with permit data by TRIPID..")
+ptm.TOTAL = Sys.time()
+#### merge PERMIT using TRIPID if vtr or rec
+FIN <- merge(FIN, QUERY_RESULT, by='TRIPID', all.x = TRUE, all.y = FALSE)
+if (NROW(FIN) != TEST_1) stop("Merging Permits increased number of rows, which shouldn't happen")
+message(paste0("Run time ", round(difftime(Sys.time(), ptm.TOTAL, units='secs'), 2), " seconds for merge"))
+}
+
+if (noaa_data_source == "vtr") {
+FIN <- FIN %>%
+  select('PORTLANDED','YEAR','VESID','NESPP3','MONTH','GEARCODE','GEARCAT','SERIAL_NUM','IDNUM','LIVE','QTYKEPT','QTYDISC','DAS','SPPNM','REVENUE','FMP','LEN','FY','TRIPID','PERMIT','LAT','LON',"STATE1")
+} 
+
+if (noaa_data_source == "rec") {
+FIN <- subset(FIN, select=c('TRIPID', 'IDNUM', 'YEAR', 'MONTH', 'DAS', 'SPPNM', 'FMP', 'NANGLERS', 'LIVE', 'QTYKEPT','QTYDISC', 'PORTLANDED',
+                            'NESPP3', 'GEARCODE', 'GEARCAT', 'PERMIT', 'VESID', 'SERIAL_NUM', "STATE1", "DATESAIL", 'LAT','LON'))
+} 
+
+
+if (noaa_data_source %in% c("dmis","dmis2022")) {
+  message("Merging Vessel Log Gear Data by GEARID/IDNUM")
+   QUERY_RESULT <- unique(as_tibble(QUERY_RESULT))
+  TEST_1 <- NROW(FIN)
+ 
+  #### merge GEARID on TRIPID if DMIS
+    FIN <- as_tibble(merge(FIN, QUERY_RESULT, by='IDNUM', all.x = TRUE, all.y = FALSE, suffixes = c("",".y")))
+  if (NROW(FIN) != TEST_1) stop("Merging Permits increased number of rows, which shouldn't happen")
+
+  # For some reason, TRIPID was renamed to TRIPID_check.  If there is no TRIPID in FIN, I want to rename TRIPID_check to TRIPID
+ if ("TRIPID_check" %in% colnames(FIN) & !("TRIPID" %in% colnames(FIN))) {
+      FIN <- FIN %>%
+        dplyr::rename("TRIPID" = TRIPID_check) 
+    }
+    
+    FIN <- FIN %>%
+      select('PORTLANDED', 'PORTLND1', 'YEAR', 'MONTH', 'DATESAIL', 'GEARCODE', 'GEARCAT', 'NESPP3', 'SPPNM', 'QTYKEPT', 'LIVE','REVENUE', 'FMP', 'IDNUM', 'SERIAL_NUM', "DOCID", 'TRIPID', 'PERMIT', "STATE1", "SOURCE", "DEALNUM", "DAS",'LAT','LON')
+
+}
+
+# comma_format()(nrow(FIN))
+# save(FIN, file="DMIS2_SERIAL_NUM.Rdata")
+# add revenue data using for-hire fees Linear Transformation by multiplying anglers by Average For-Hire Fee
+# for_hire_fees <- for_hire_fees %>% mutate(YEAR = as.integer(YEAR))
+
+if (noaa_data_source == "rec") { #create revenue for rec
+  # read in for hire data through original excel file instead?
+  # for_hire_fees <- as_tibble(read.csv("./data-raw/For-Hire_Fee.csv", as.is = TRUE))
+  
+  for_hire_fees <- offshoreWind::for_hire_fees %>%  # get clean and ready for join
+    dplyr::rename("YEAR" = Year) %>% 
+    mutate(YEAR = as.character(YEAR))
+  
+  FIN <- FIN %>% mutate(YEAR = as.integer(YEAR))
+  for_hire_fees <- for_hire_fees %>% mutate(YEAR = as.integer(YEAR))
+  # FIN <- FIN %>% dplyr::mutate(STATE1 = replace_na(STATE1, ""))
+  # FIN %>% distinct(., STATE1)
+  
+  FIN <- FIN %>% left_join(for_hire_fees, by = "YEAR") # join for-hire fees based on year to create state columns
+  
+  FIN <- as.data.frame(FIN)
+  # create a single column of for-hire fees based on state columns
+  FIN$for_hire_fee <-
+    FIN[cbind(
+      seq_len(nrow(FIN)),
+      match(FIN$STATE1, colnames(FIN))
+    )]
+  
+  message("Multiplying for-hire fees by number of anglers..")
+  FIN <- FIN %>% 
+    mutate(for_hire_fee = as.double(for_hire_fee)) %>% # make for hire fee a double 
+    dplyr::select(-c(setdiff(names(for_hire_fees), "YEAR"))) %>% # remove joined state fee columns except for the YEAR column
+    mutate(REVENUE = for_hire_fee*NANGLERS) # create revenue by multiplying for-hire fees by anglers
+  message("Done.")
+
+  # join TRIPIDs to overlap GEARIDs
+  GEARID_to_TRIPID <- as_tibble(offshoreWind::GEARID_QUERY)
+  GEARID_to_TRIPID <- GEARID_to_TRIPID %>% 
+    dplyr::select(-SERIAL_NUM) %>% 
+    dplyr::rename("IDNUM" = GEARID)
+  GEARID_to_TRIPID <- GEARID_to_TRIPID[ which(GEARID_to_TRIPID$YEAR_L >= START.YEAR & GEARID_to_TRIPID$YEAR_L <= END.YEAR+1),]
+
+  inside_areas_combined_trip <- as_tibble(merge(x=inside_areas_combined, y=GEARID_to_TRIPID,
+                       by.x=c('IDNUM','Year'), by.y=c('IDNUM','YEAR_L'),
+                       all.x=TRUE, all.y=TRUE)) # Old Merge
+
+  inside_areas_combined_trip <- as_tibble(inside_areas_combined_trip %>% 
+    dplyr::select(-IDNUM))
+  # distinct(inside_areas_combined_trip, Inside)
+  
+} 
+
+
+########################################################################################################################################
+if (noaa_data_source  %in% c("vtr","dmis","dmis2022")) {
+  
+# Merge raster overlap with VTR/DMIS data - check if imgids recycle
+message("Merging area data with ", ifelse(noaa_data_source=="vtr", "VTR", ifelse(noaa_data_source=="rec", "REC", ifelse(noaa_data_source=="dmis", "DMIS", "DMIS"))), " data by IDNUM and year..")
+ptm.TOTAL = Sys.time()
+REVENUEFILE <- as_tibble(merge(x=inside_areas_combined, y=FIN, 
+                     by.x=c('IDNUM','Year'), by.y=c('IDNUM','YEAR'),
+                     all.x=TRUE, all.y=TRUE)) # Old Merge
+
+# REVENUEFILE2 <- as_tibble(merge(inside_areas_combined, FIN, 
+#                                by.x=c("IDNUM","Year"), by.y=c("IDNUM","YEAR"), 
+#                                all.X=TRUE,all.y=FALSE)) # Merge from Gerets markdown - *** the y join is now false ??right join??
+# REVENUEFILE3 <- as_tibble(merge(x=FIN, y=inside_areas_combined, 
+#                      by.x=c('IDNUM','YEAR'), by.y=c('IDNUM','Year'),
+#                      all.x=TRUE, all.y=TRUE)) # Old Merge with tables switched
+
+# colnames(FIN)
+# comma_format()(nrow(REVENUEFILE))
+# test <- REVENUEFILE %>% filter(!is.na(Area))
+
+message(paste0("Run time ", round(difftime(Sys.time(), ptm.TOTAL, units='secs'), 2), " seconds for merge"))
+message(comma_format()(length(base::intersect(inside_areas_combined$IDNUM, FIN$IDNUM))), " GearID matches from area data..") # number of matches from source data to area data through gearid
+}
+########################################################################################################################################
+
+########################################################################################################################################
+if (noaa_data_source == "rec") {
+# Merge raster overlap with REC data - check if imgids recycle
+message("Merging area data with REC data by TRIPID and year..")
+ptm.TOTAL = Sys.time()
+
+REVENUEFILE <- as_tibble(merge(x=inside_areas_combined_trip, y=FIN,
+                     by.x=c('TRIPID','Year'), by.y=c('TRIPID','YEAR'),
+                     all.x=TRUE, all.y=TRUE)) # Old Merge
+
+
+message(paste0("Run time ", round(difftime(Sys.time(), ptm.TOTAL, units='secs'), 2), " seconds for merge"))
+
+# message(comma_format()(length(base::intersect(inside_areas_combined_trip$TRIPID, FIN$TRIPID))), " TRIPID matches from area data..") # number of matches from source data to area data through gearid
+message(comma_format()(length(base::intersect(inside_areas_combined$IDNUM, FIN$IDNUM))), " TRIPID matches from area data..") # number of matches from source data
+
+}
+
+
+# NOTE: The hullnum/vesid is filling in the permit number for clam trips, which don't have a permit attached to the record in the SFCLAM database. This will create NA's in the data
+# if (noaa_data_source == "vtr") { # fix hull number and clam data
+# REVENUEFILE <- REVENUEFILE[!is.na(REVENUEFILE$IDNUM),]
+# REVENUEFILE$PERMIT[which(REVENUEFILE$GEARCODE=='DRC'& is.na(REVENUEFILE$PERMIT) & !is.na(REVENUEFILE$VESID))] <- REVENUEFILE$VESID[which(REVENUEFILE$GEARCODE=='DRC'& is.na(REVENUEFILE$PERMIT) & !is.na(REVENUEFILE$VESID))]
+# } else if (noaa_data_source == "dmis1" || noaa_data_source == "dmis") {
+# REVENUEFILE <- REVENUEFILE[!is.na(REVENUEFILE$IDNUM),]
+# REVENUEFILE$PERMIT[which(REVENUEFILE$GEARCODE=='DRC'& is.na(REVENUEFILE$PERMIT))] <- REVENUEFILE$VESID[which(REVENUEFILE$GEARCODE=='DRC'& is.na(REVENUEFILE$PERMIT))]
+# }
+
+#There are a few trips which are left over from the earlier raster processing
+# (not in the most recent data for whatever reason) 528 observations, but less trips total.
+
+REVENUEFILE <- REVENUEFILE[!is.na(REVENUEFILE$PERMIT),]
+#Dropping observations with pelagic gear
+REVENUEFILE<-REVENUEFILE %>%
+    replace_na(list(REVENUE = 0, QTYKEPT=0,DAS=0,LIVE=0, Area="Other" )) %>%
+    mutate(InsideREV = Inside*REVENUE,
+          InsideLANDED= Inside*QTYKEPT,
+          InsideDAS = Inside*DAS)
+    
+#Hack the values of REVENUEFILE$Area
+REVENUEFILE$Area[which(REVENUEFILE$Area=="Northeast_Canyons_And_Seamounts_New") ] <- 'Northeast_Canyons_And_Seamounts'
+
+# Need quanty kept and quantity discarted for InsideLanded variable
+if (noaa_data_source %in% c("vtr","rec")) {
+  REVENUEFILE<-REVENUEFILE %>%
+    replace_na(list(QTYDISC = 0)) %>%
+    mutate(TOTCATCH = LIVE+QTYDISC,
+          InsideCATCH= Inside*TOTCATCH)
+
+# Check vessle lengths - need access to permit table to run ship length R script
+# REVENUEFILE$vesselcat = "U"
+# REVENUEFILE$vesselcat[which(REVENUEFILE$LEN <50)] <- "S"
+# REVENUEFILE$vesselcat[which(REVENUEFILE$LEN >=50 & REVENUEFILE$LEN < 70)] <- "M"
+# REVENUEFILE$vesselcat[which(REVENUEFILE$LEN >=70)] <- "L"
+
+if (is.na(NROW(REVENUEFILE[which(is.na(REVENUEFILE$TOTCATCH)),]))) stop("Some Total Catch is zero")
+  }
+
+REVENUEFILE$BROADZONE <- REVENUEFILE$Area
+# change area names ??
+# REVENUEFILE$BROADZONE[REVENUEFILE$Area%in%c('Primary_Recommendation','Secondary_Recommendation')] <- "Recommendation"
+# REVENUEFILE$BROADZONE[REVENUEFILE$Area%in%MGAREA] <- "Recommendation"
+
+# REVENUEFILE$SPPNM[REVENUEFILE$NESPP3==801] <- "INSHORE LONGFIN SQUID"
+REVENUEFILE$SPPNM[REVENUEFILE$NESPP3%in%c(11,12)] <- "MONKFISH" # ***could this be the monkfish issue?
+REVENUEFILE$SPPNM[REVENUEFILE$NESPP3%in%c(769)] <- "SURF CLAM"
+REVENUEFILE$SPPNM[REVENUEFILE$NESPP3%in%c(754,755)] <- "OCEAN QUAHOG"
+
+#FIN <- REVENUEFILE
+
+# if (save_files == "r" | save_files == "b" ) {
+#   save(REVENUEFILE,file=file.path(output_f, paste0(project_name,"_Data.Rdata",sep="")))
+# }
+# 
+# if (save_files == "c" | save_files == "b" ) {
+#   write.csv(REVENUEFILE,file=file.path(output_f, paste0(project_name,"_Data.csv",sep="")))
+# }
+
+
+REVENUEFILE_backup <- REVENUEFILE
+
+# TODO: This part was added to troubleshoot an issue and can be refactored
+# get character vector of all zones except "Other"
+allZones1 <- sort(unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ]) 
+# as.factor(unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ])
+allZones <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", allZones1), perl=TRUE) # make name pretty
+
+
+# TODO: add column of areas with underscores to REVENUEFILE to reduce repeated code ???
+
+# min(max(length(unique(nespp3))),7)
+ 
+```
+
+
+ <!----  The adjust_nominal_values_to_real_values chunk creates a new column (nominal_revenue) and normalizes REVENUE to constant dollars--->
+```{r adjust_nominal_values_to_real_values, eval = T} 
+# Adjusting nominal values to real values  
+
+# note **** there are NAs in REVENUE
+
+#####################################################################################################################
+
+# Set deflator based on year
+
+# Testing
+# deflate_by = "quarter"
+# base_year = 2019
+# base_quarter = "Q1"
+# REVENUEFILE <- REVENUEFILE_backup
+
+if(deflate_by=="year") {
+  REVENUEFILE <- REVENUEFILE %>%
+    mutate(nominal_revenue = REVENUE)
+
+  GDPDEF_annual <- GDPDEF_annual %>% 
+    dplyr::select(GDPDEF, Year) #  reduce columns
+  
+  REVENUEFILE <- as_tibble(merge(REVENUEFILE, GDPDEF_annual, by="Year", all.x=TRUE))
+  
+  REVENUEFILE[["REVENUE"]] <- REVENUEFILE[["nominal_revenue"]]*
+    unique(GDPDEF_annual$GDPDEF[GDPDEF_annual$Year==base_year])/REVENUEFILE$GDPDEF
+  
+  REVENUEFILE$GDPDEF <- NULL
+
+  FIN <- FIN %>%
+    mutate(nominal_revenue = REVENUE) %>% 
+    dplyr::rename("Year"=YEAR)
+
+  FIN <- as_tibble(merge(FIN, GDPDEF_annual, by="Year", all.x=TRUE))
+  FIN[["REVENUE"]] <- FIN[["nominal_revenue"]]*
+    unique(GDPDEF_annual$GDPDEF[GDPDEF_annual$Year==base_year])/FIN$GDPDEF
+  FIN$GDPDEF <- NULL
+}
+# save(REVENUEFILE, file="REVENUEFILE.Rdata")
+
+#####################################################################################################################
+# Set deflator based on year and quarter
+
+if(deflate_by=="quarter") {
+
+  REVENUEFILE <- REVENUEFILE %>%
+    mutate(nominal_revenue = REVENUE) %>%  # create column for old revenue
+    # mutate(MONTH = as.integer(format(DATESAIL,"%m"))) %>% # create column for MONTHth
+    mutate(MONTH = as.integer(MONTH)) %>% # make sure MONTH is integer
+    mutate(nominal_revenue = REVENUE) %>%  # Setup column for old revenue values
+    mutate(Quarter = "") %>% # Create quarters column
+    mutate(Quarter = ifelse(MONTH %in% 1:3, "Q1", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 4:6, "Q2", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 7:9, "Q3", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 10:12 , "Q4", Quarter))
+
+  FIN <- FIN %>%
+    mutate(nominal_revenue = REVENUE) %>%  # create column for old revenue
+    # mutate(MONTH = as.integer(format(DATESAIL,"%m"))) %>% # create column for MONTHth
+    mutate(MONTH = as.integer(MONTH)) %>% # make sure MONTH is integer
+    mutate(nominal_revenue = REVENUE) %>%  # Setup column for old revenue values
+    mutate(Quarter = "") %>% # Create quarters column
+    mutate(Quarter = ifelse(MONTH %in% 1:3, "Q1", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 4:6, "Q2", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 7:9, "Q3", Quarter)) %>%
+    mutate(Quarter = ifelse(MONTH %in% 10:12 , "Q4", Quarter))
+
+  REVENUEFILE <- as_tibble(merge(REVENUEFILE, GDPDEF_quarterly, by=c("Year", "Quarter"), all.x=TRUE, all.y=FALSE))
+
+  FIN <- as_tibble(merge(FIN, GDPDEF_quarterly, by=c("Year", "Quarter"), all.x=TRUE, all.y=FALSE))
+
+  REVENUEFILE[["REVENUE"]] <- REVENUEFILE[["nominal_revenue"]]*
+    unique(GDPDEF_quarterly$GDPDEF[GDPDEF_quarterly$Year==base_year&GDPDEF_quarterly$Quarter==base_quarter])/REVENUEFILE$GDPDEF # apply deflator to nominal revenue
+
+  # REVENUEFILE <- REVENUEFILE %>% dplyr::select(-GDPDEF, -Quarter) # Remove irrelevant columns
+  REVENUEFILE <- REVENUEFILE %>% dplyr::select(-GDPDEF) # Remove irrelevant columns
+
+
+  FIN[["REVENUE"]] <- FIN[["nominal_revenue"]]*
+    unique(GDPDEF_quarterly$GDPDEF[GDPDEF_quarterly$Year==base_year&GDPDEF_quarterly$Quarter==base_quarter])/FIN$GDPDEF # apply deflator to nominal revenue
+
+  # REVENUEFILE <- REVENUEFILE %>% dplyr::select(-GDPDEF, -Quarter) # Remove irrelevant columns
+  FIN <- FIN %>% dplyr::select(-GDPDEF) # Remove irrelevant columns
+
+}
+
+# create revenue deflation note for vignette:
+revenue_deflation_note <- ""
+revenue_deflation_note <- paste0("Revenue values have been deflated to ", if_else(deflate_by == "quarter", paste0(base_quarter," "),""), base_year, " dollars." )
+
+
+# backups for testing
+FIN_backup <- FIN
+REVENUEFILE_backup <- REVENUEFILE
+
+# Save REVENUEFILE
+if (length(proj_area_name) == 1) {
+  saveRDS(REVENUEFILE, file= file.path(output_revenue, paste0("REVENUEFILE_", proj_area_name, ".Rds"))) # save revenuefile if number of areas is 1
+} else if(length(proj_area_name) > 1 & overlap_data_source == "folder") {
+  saveRDS(REVENUEFILE, file= file.path(output_revenue, paste0("REVENUEFILE_", basename(overlap_data_path), ".Rds"))) # save revenuefile if more than 1 area and overlap data comes from a folder - save as name of folder
+} else {
+  saveRDS(REVENUEFILE, file= file.path(output_revenue, paste0("REVENUEFILE_", proj_area_name[1],"_and_other_areas", ".Rds"))) # save revenuefile if more than 1 area and any other edge cases
+}
+
+
+# Save FIN
+
+if (length(proj_area_name) == 1) {
+  saveRDS(FIN, file= file.path(output_fin, paste0("FIN_", proj_area_name, ".Rds"))) # save revenuefile if number of areas is 1
+} else if(length(proj_area_name) > 1 & overlap_data_source == "folder") {
+  saveRDS(FIN, file= file.path(output_fin, paste0("FIN_", basename(overlap_data_path), ".Rds"))) # save revenuefile if more than 1 area and overlap data comes from a folder - save as name of folder
+} else {
+  saveRDS(FIN, file= file.path(output_fin, paste0("FIN_", proj_area_name[1],"_and_other_areas", ".Rds"))) # save revenuefile if more than 1 area and any other edge cases
+}
+
+
+
+
+
+
+
+```
