@@ -664,7 +664,7 @@ Under the baseline, there is a probability that fishing would be allowed in NCSM
 If commercial fishing is allowed, the stock of habitat inside NCSMNM would decline in proportion to the amount of bottom contact of the fishing effort.  Both the decrease in quality of the habitat stock and the economic costs that decline in quality are difficult to quantify.  In Oceanographer, Gilbert, and Lydonia canyons, the hard canyon walls provide habitats for sponges, corals, and other invertebrates that filter food from the water to flourish, and for larger species including squid, octopus, skates, flounders, and crabs. Major oceanographic features, such as currents, temperature gradients, eddies, and fronts, occur on a large scale and influence the distribution patterns of such highly migratory oceanic species as tuna, billfish, and sharks. They provide feeding grounds for these and many other marine species.  
 
 
-```{r fmp_top_five_dynamic_text, results='asis', eval = T} 
+```{r fmp_top_five_dynamic_text, eval = T} 
 
 # sort(names(REVENUEFILE))
 
@@ -753,7 +753,7 @@ numsp <- length(unique(piifmpsppnm_allyrs$SPPNM))
 ```
 
 
-```{r top_fmp_landings_plots, results='asis', eval = top_fmp_section} 
+```{r top_fmp_landings_plots, eval = top_fmp_section} 
 ##########################################################################
 
 # create new folder for section
@@ -953,7 +953,7 @@ ggsave(filename = file.path(output_ftopfmp, paste0("Top5FMPLand_",substr(broadzo
 rm(lp) # garbage collection - free up memory
 ```
 
-```{r top_fmp_revenue_figure, results='asis', eval = top_fmp_section} 
+```{r top_fmp_revenue_figure, eval = top_fmp_section} 
 
 
 #######################################################################################
@@ -1003,7 +1003,7 @@ rm(rp)
 # knitr::include_graphics("rrtools-steps-carbon.png")
 ```
 
-Figures \ref{fig:top_fmp_landings_plots} and \ref{top_fmp_revenue_figure} describe landings and revenue from 2012 to 2016 that occured within the NCSMNM boundary addition disaggregated by FMP and year. These figures provide insight into annual flows of benefits of resuming fishing in the NCSMNM addition and the types of firms to which those benefits would accrue *in the baseline*.  Tables \ref{tab:top_fmp_landings_table} and \ref{tab:top_fmp_revenue_table} present totals over this five year time period.
+Figures \ref{fig:top_fmp_landings_plots} and \ref{fig:top_fmp_revenue_figure} describe landings and revenue from 2012 to 2016 that occured within the NCSMNM boundary addition disaggregated by FMP and year. These figures provide insight into annual flows of benefits of resuming fishing in the NCSMNM addition and the types of firms to which those benefits would accrue *in the baseline*.  Tables \ref{tab:top_fmp_landings_table} and \ref{tab:top_fmp_revenue_table} present totals over this five year time period.
 
 ```{r top_fmp_landings_table, eval = top_fmp_section} 
 
@@ -1061,7 +1061,7 @@ kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=1)), caption = "2012-
 ```
 
 
-Figures \ref{landings_plot_by_gear} to \ref{revenue_plot_by_gear} describe landings from 2012 to 2020 that occurred within the NCSMNM boundary addition. They are disaggregated by gear to provide some insight into the possible declines in the stock of habitat in the area if fishing resumed.  Some types of gear (say midwater trawl or handline) has minimal effects on the ocean bottom compared to others (say Trawl or Dredge). Tables \ref{tab:landings_table_by_gear} and \ref{tab:revenue_table_by_gear} present totals over this five year time period.
+Figures \ref{fig:landings_plot_by_gear} to \ref{fig:revenue_plot_by_gear} describe landings from 2012 to 2020 that occurred within the NCSMNM boundary addition. They are disaggregated by gear to provide some insight into the possible declines in the stock of habitat in the area if fishing resumed.  Some types of gear (say midwater trawl or handline) has minimal effects on the ocean bottom compared to others (say Trawl or Dredge). Tables \ref{tab:landings_table_by_gear} and \ref{tab:revenue_table_by_gear} present totals over this five year time period.
 
 ```{r landings_plot_by_gear, eval = select_gear_section}  
 # REVENUEFILE <- REVENUEFILE_backup
@@ -1309,8 +1309,8 @@ allyrland_table[nrow(allyrland_table),2] <- paste0("**",allyrland_table[nrow(all
 # set dynamic varible names (cant use paste0 in rename in tidyverse)
 names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- paste0(numyear, " Year Landings")
 
-
-print(kable(allyrland_table, caption = paste0(numyear, ' Year Total Landings (Pounds), Select Gear Types, ',broadzone), align=c('l', 'r')))
+kbl(allyrland_table, booktabs=T,  align=c("l",rep('r',times=1)), caption = "2012-2016 Total Landings")  %>%
+      kable_styling(full_width = F)
 ```
 
 ```{r revenue_table_by_gear, eval = select_gear_section}  
@@ -1339,10 +1339,8 @@ allyrrev_table[nrow(allyrrev_table),2] <- paste0("**",allyrrev_table[nrow(allyrr
 # set dynamic varible names (cant use paste0 in rename in tidyverse)
 names(allyrrev_table)[names(allyrrev_table) == "All Year Total"] <- paste0(numyear, " Year Revenue")
 
-cat("\n\n")
-
-print(kable(allyrrev_table, caption = paste0(numyear, ' Year Total Revenue, Select Gear Types, ', broadzone), align=c('l', 'r')))
-  
+kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=1)), caption = "2012-2016 Total Revenue, Select Gear Types")  %>%
+      kable_styling(full_width = F)
 cat("\n\n\n\n\n\n")
 
 
