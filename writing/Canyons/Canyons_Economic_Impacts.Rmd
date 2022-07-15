@@ -155,7 +155,7 @@ dmis2022_infile<-here("raw_data","APSD_WIND_TEST_2022_07_07.Rds")
 
 START.YEAR<-2012
 #START.YEAR<-2018
-END.YEAR<-2020
+END.YEAR<-2016
 
 numyear <- offshoreWind::proper(offshoreWind::numbers2words(as.integer(length(START.YEAR:END.YEAR))))
 
@@ -552,9 +552,16 @@ if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name) == F
 
 
 ```{r load_REVENUEFILE_and_FIN, eval = !Data_Process_Switch} 
-REVENUEFILE<-readRDS(file.path(output_revenue, paste0("REVENUEFILE_", proj_area_name, ".Rds"))) 
+REVENUEFILE<-readRDS(file.path(output_revenue, paste0("REVENUEFILE_", proj_area_name, ".Rds")))
+REVENUEFILE <-REVENUEFILE %>%
+  filter(Year>=START.YEAR & Year<=END.YEAR) %>%
+  mutate(Area = if_else(Area=="Northeast_Canyons_And_Seamounts", "Northeast_Canyons_And_Seamounts_Addition", Area))
+
 FIN<-readRDS(file.path(output_fin, paste0("FIN_", proj_area_name, ".Rds"))) 
-allZones1 <- sort(unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ]) 
+FIN <-FIN %>%
+  filter(Year>=START.YEAR & Year<=END.YEAR)
+
+ allZones1 <- sort(unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ]) 
 # as.factor(unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ])
 allZones <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", allZones1), perl=TRUE) # make name pretty
 ```
@@ -652,12 +659,694 @@ The status of the habitat in NCSMNM can be thought of as a stock: the ability of
 The economic activity in the NCSMNM can be characterized as series of flows. Each year, benefits accrue to the nation.  These may take the form of extractive uses, like commercial fishing, which may also depend on environmental status.  Briefly, high-quality habitat may make it easier to catch fish and increase the abundance of fish. Benefits may also accrue though non-extractive uses.
 
 Understanding the NPV of economic activity in NCSMNM arising from any policy is then an exercise of discounting and summing the flows of benefits (accruing from extractive and non-extractive uses) over time. 
-
 Under the baseline, there is a probability that fishing would be allowed in NCSMNM at some unknown point in the future.  We refrain from an assessment of when this might occur or the probability that it would occur.  However, if it does change, the extractive and non-extractive flow of benefits will change.  In particular,  additional benefits would accrue to both the fishing industry and consumers of seafood.  These would be positively related to the amount of fishing that would occur in 18% of NCSMNM.  We are unable to producer or consumer surplus measures associated with fishing inside this area; we therefore characterize the fishing that would occur inside this area. We use commercial fishing data from 2012-2016 time due to the changing status of fishing after 2016.
 
 If commercial fishing is allowed, the stock of habitat inside NCSMNM would decline in proportion to the amount of bottom contact of the fishing effort.  Both the decrease in quality of the habitat stock and the economic costs that decline in quality are difficult to quantify.  In Oceanographer, Gilbert, and Lydonia canyons, the hard canyon walls provide habitats for sponges, corals, and other invertebrates that filter food from the water to flourish, and for larger species including squid, octopus, skates, flounders, and crabs. Major oceanographic features, such as currents, temperature gradients, eddies, and fronts, occur on a large scale and influence the distribution patterns of such highly migratory oceanic species as tuna, billfish, and sharks. They provide feeding grounds for these and many other marine species.  
 
-Figures \ref{} to \ref{} describe revenue from 2012 to 2016 that occured within the NCSMNM boundary addition and are disaggregated by FMP and gear.  These provide insight into annual flows of benefits of resuming fishing in the NCSMNM addition and the types of firms to which those benefits would accrue *in the baseline*.  Figures \ref{} to \ref{} describe landings from 2012 to 2016 that occured within the NCSMNM boundary addition. They are disaggregated by gear to provide some insight into the possible declines in the stock of habitat in the area if fishing resumed.  Some types of gear (say midwater trawl or handline) has minimal effects on the ocean bottom compared to others (say Trawl or Dredge). 
+
+```{r fmp_top_five_dynamic_text, results='asis', eval = T} 
+
+# sort(names(REVENUEFILE))
+
+# unique(REVENUEFILE$FMP)
+# unique(REVENUEFILE$NESPP3)
+# test <- REVENUEFILE %>% filter(is.na(FMP))
+
+# Top 5 fmps after pii fix for all areas
+top_five_fmp_names <- REVENUEFILE %>%
+  filter(Area != "Other") %>%
+ filter(!FMP %in% c("SERO FMP","Highly Migratory Species","No Federal FMP", "ASMFC FMP"))%>%
+  dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM) %>%
+  group_by(Year, FMP, Area) %>%
+  dplyr::summarize(
+    InsideREV = sum(InsideREV, na.rm = T),
+    InsideLANDED = sum(InsideLANDED, na.rm = T),
+    npermits = length(unique(PERMIT)),
+    ndealers = length(unique(DEALNUM))
+    ) %>%
+  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
+  mutate(FMP_CONF = ifelse(CONF == T, 'Other NER', FMP)) %>%
+  ungroup() %>%
+  group_by(Year, FMP_CONF, Area) %>%
+  dplyr::summarize(
+    yfa_rev = sum(InsideREV, na.rm = T),
+    yfa_land = sum(InsideLANDED, na.rm = T),
+    npermits = sum(npermits, na.rm = T)) %>% 
+  dplyr::rename("FMP"= FMP_CONF) %>% 
+  dplyr::select(FMP, Year, Area, yfa_rev, yfa_land) %>% 
+  # group_by(FMP, Area) %>% 
+  group_by(FMP) %>% 
+  dplyr::summarize(
+    allyrtotal_rev = sum(yfa_rev, na.rm = T),
+    allyrtotal_land = sum(yfa_land, na.rm = T)) %>% 
+  arrange(desc(allyrtotal_rev)) %>% 
+  ungroup() %>% 
+  top_n(n=10, wt=allyrtotal_rev) %>% 
+  pull(FMP)
+
+# Might be an issue of top 5 FMP has 0 revenue
+
+if (any(top_five_fmp_names %in% "No Federal FMP")) {
+  topfmp_names <- paste0(top_five_fmp_names[!top_five_fmp_names %in% "No Federal FMP"], collapse = ", ")
+  topfmp_names <- paste0(topfmp_names, " and No Federal FMP")
+} else {
+  topfmp_names <- paste0(top_five_fmp_names %notin%  tail(top_five_fmp_names, n=1), collapse = ", ")
+  topfmp_names <-paste0(topfmp_names, " and ", tail(top_five_fmp_names, n=1))
+}
+
+# length(unique(REVENUEFILE[which(REVENUEFILE$FMP == "None" & REVENUEFILE$InsideREV > 0),]$SPPNM))
+
+piifmpsppnm_allyrs <- REVENUEFILE %>% 
+  filter(Area != "Other") %>% 
+ filter(!FMP %in% c("SERO FMP","Highly Migratory Species","No Federal FMP", "ASMFC FMP"))%>%
+  # dplyr::select(FMP, SPPNM, Year, InsideREV, InsideLANDED, PERMIT) %>%
+  dplyr::select(FMP, SPPNM, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
+  group_by(FMP, SPPNM) %>%
+  dplyr::summarize(
+    InsideREV = sum(InsideREV, na.rm = T),
+    InsideLANDED = sum(InsideLANDED, na.rm = T),
+    npermits = length(unique(PERMIT)),
+    ndealers = length(unique(DEALNUM))
+    ) %>%
+  # mutate(CONF =  npermits < 3) %>%
+  # mutate(CONF2 = ndealers < 3) %>%
+  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
+  mutate(FMP_CONF = ifelse(CONF == T, 'Other NER', FMP)) %>%
+  mutate(SPPNM_CONF = ifelse(CONF == T, 'Other NER', SPPNM)) %>%
+  ungroup() %>%
+  # dplyr::select(-starts_with("FMP")) %>%
+  dplyr::select(InsideREV, InsideLANDED, npermits, FMP_CONF, SPPNM_CONF) %>%
+  group_by(FMP_CONF, SPPNM_CONF) %>%
+  dplyr::summarize(
+    InsideREV_total = sum(InsideREV, na.rm = T),
+    InsideLANDED_total = sum(InsideLANDED, na.rm = T),
+    npermits = sum(npermits, na.rm = T)) %>%
+  arrange(desc( InsideREV_total)) %>%
+  dplyr::rename("FMP"= FMP_CONF,"SPPNM"= SPPNM_CONF, "All Year Revenue" = InsideREV_total, "All Year Landings (Pounds)" = InsideLANDED_total)
+  
+numsp <- length(unique(piifmpsppnm_allyrs$SPPNM))
+
+
+# -if areas dont have same top FMP ??
+
+
+```
+
+
+```{r top_fmp_landings_plots, results='asis', eval = top_fmp_section} 
+##########################################################################
+
+# create new folder for section
+dir.create(file.path(output_f, "topfmp"), showWarnings = FALSE)
+output_ftopfmp = file.path(output_f, "topfmp")
+
+
+# DO NOT USE THIS TABLE FOR ANYTHING OTHER THAN DETERMINING THE NAMES OF THE TOP FMPS FOR THE AREA(S) - GROUPING FOR PII WILL MESS UP TOTALS 
+# Get top revenue FMPs, sorted by revenue, grouped by FMPs for all years and remove PII - ** this list order will be used for all areas
+allYearsSum <- REVENUEFILE %>% # FMP NAs are already removed in the DMIS cleaning code chunk
+  filter(Area != "Other") %>% 
+ filter(!FMP %in% c("SERO FMP","Highly Migratory Species","No Federal FMP", "ASMFC FMP"))%>%
+  # dplyr::select(FMP, InsideREV, InsideLANDED, PERMIT) %>%
+  dplyr::select(FMP, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
+  group_by(FMP) %>% # Using only FMP as grouping will mess up uniqueness of dealers and permits
+  dplyr::summarize(
+    InsideREV = sum(InsideREV, na.rm = T),
+    InsideLANDED = sum(InsideLANDED, na.rm = T),
+    npermits = length(unique(PERMIT)),
+    ndealers = length(unique(DEALNUM))
+    ) %>%
+  # mutate(CONF = npermits < 3) %>%
+  # mutate(CONF2 =  ndealers < 3) %>%
+  mutate(CONF = npermits < 3 | ndealers < 3) %>%
+  mutate(FMP_CONF = ifelse(CONF == T, 'Other NER', FMP)) %>%
+  ungroup() %>%
+  # dplyr::select(-starts_with("FMP")) %>%
+  dplyr::select(InsideREV, InsideLANDED, npermits, FMP_CONF) %>%
+  group_by(FMP_CONF) %>%
+  dplyr::summarize(
+    InsideREV_total = sum(InsideREV, na.rm = T),
+    InsideLANDED_total = sum(InsideLANDED, na.rm = T),
+    npermits = sum(npermits, na.rm = T)) %>% 
+  dplyr::rename("FMP"= FMP_CONF)
+
+# PII fixed for all areas
+piifmp <- REVENUEFILE %>%
+  filter(Area != "Other") %>% 
+ filter(!FMP %in% c("SERO FMP","Highly Migratory Species","No Federal FMP", "ASMFC FMP"))%>%
+  # dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
+  dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM) %>% # for dealers
+  group_by(Year, FMP, Area) %>%
+  dplyr::summarize(
+    InsideREV = sum(InsideREV, na.rm = T),
+    InsideLANDED = sum(InsideLANDED, na.rm = T),
+    npermits = length(unique(PERMIT)),
+    ndealers = length(unique(DEALNUM))
+    ) %>%
+  # mutate(CONF =  npermits < 3) %>%
+  # mutate(CONF2 =  ndealers < 3) %>%
+  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
+  mutate(FMP_CONF = ifelse(CONF == T, 'Other NER', FMP)) %>%
+  ungroup() %>%
+  # dplyr::select(-starts_with("FMP")) %>%
+  # dplyr::select(Year, InsideREV, InsideLANDED, npermits, FMP_CONF) %>%
+  group_by(Year, FMP_CONF, Area) %>%
+  dplyr::summarize(
+    yfa_rev = sum(InsideREV, na.rm = T),
+    yfa_land = sum(InsideLANDED, na.rm = T),
+    npermits = sum(npermits, na.rm = T)) %>% 
+  dplyr::rename("FMP"= FMP_CONF)
+
+fmpallyr_total <- piifmp %>% dplyr::select(FMP, Year, Area, yfa_rev, yfa_land) %>% 
+  group_by(FMP, Area) %>% 
+  dplyr::summarize(
+    allyrtotal_rev = sum(yfa_rev, na.rm = T),
+    allyrtotal_land = sum(yfa_land, na.rm = T)
+  )
+
+fmp_merge <- merge(piifmp, fmpallyr_total, by = c("FMP", "Area"))
+
+# write.csv(fmp_merge, file="fmp_merge.csv", row.names=FALSE)
+# create a table with a bunch of differently grouped totals that will be filtered by area during the iteration of the graphs
+topFMP_all_areas <- left_join(allYearsSum, fmp_merge, by='FMP') %>% 
+  filter(FMP %in% top_five_fmp_names) # top_five_fmp_names is from the summary creater section 
+
+
+# get top fmps by revenue, overall
+top5fmps <- fmp_merge %>% group_by(FMP) %>%
+ filter(!FMP %in% c("SERO FMP","Highly Migratory Species","No Federal FMP", "ASMFC FMP"))%>%
+  dplyr::summarize(
+    REV = sum(yfa_rev, na.rm = T)
+    ) %>% 
+  ungroup %>% 
+  top_n(., n=10, wt=REV) %>% 
+  arrange(desc(REV)) %>% 
+  ungroup
+  # ungroup %>% 
+  # mutate(FMP = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(FMP), perl=TRUE)) %>% 
+  # mutate(FMP = if_else(FMP=="None","No Federal FMP", FMP))
+
+# top5fmps <- fmp_merge %>% group_by(FMP) %>%
+#   dplyr::summarize(
+#     REV = sum(allyrtotal_rev, na.rm = T)
+#     ) %>%
+#   ungroup %>%
+#   top_n(., n=5, wt=REV) %>%
+#   arrange(desc(REV)) %>%
+#   ungroup()
+
+topfmp_names_wrapped <- str_wrap(unique(top5fmps$FMP), width=30) # change extra long legend names - add a \n to halfway word to match plot
+
+NumUniqueMargins <- length(unique(top5fmps$FMP))
+
+UniqueMargins <- str_wrap(unique(top5fmps$FMP), width=30) # change extra long legend names - add a \n to halfway word to match plot
+
+# make extra colors if more unique FMPs than maximum colors for palette
+if (NumUniqueMargins > maxUniqueColors) {
+  getPalette = colorRampPalette(brewer.pal(maxUniqueColors, paletteName1))
+  myColors <- getPalette(NumUniqueMargins)
+} else {
+  myColors <- brewer.pal(NumUniqueMargins, paletteName1) # create list of colors using number of unique FMPs from pallettte name
+  }
+
+names(myColors) <- UniqueMargins # name colors for color scale
+
+# create custom color scale assigned to each fmp to use on all top fmp plots
+uniquefmpScale <- scale_fill_manual(name = NULL, values = myColors, guide = guide_legend(reverse = TRUE))
+
+topfmpColors <- myColors
+
+rm(NumUniqueMargins, UniqueMargins) # garbage collection
+
+# uniquefmpScale <- make_color_scale(top5fmps$FMP, scale_name = paletteName1, maxUniqueColors = maxUniqueColors, wrap_names = TRUE)
+
+# original color scale based on revenue quanities - subjective to areas
+quantScale <- scale_fill_viridis(discrete=TRUE)
+
+#####################################
+#### Set Top FMP Plot Colors end ####
+#####################################
+
+
+###########################################################
+############ get only data for select area ###########
+###########################################################
+# ### replace underscores with space and capitalize each word (for plot title automation)
+# broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE)
+
+# topFMP <- left_join(head(allYearsSum[order(-allYearsSum$InsideREV_total),],5), fmp_merge, by='FMP')
+
+#### get rev and landing plots and tables for all zones
+broadzone<-allZones[1]
+
+
+  broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", broadzone)), perl=TRUE) # make spaces underscores and backslashs as dashes in area 
+  
+# filter grouped totals table by the current area
+topFMP_table <- topFMP_all_areas %>% filter(Area == broadzone_underscore)#create top fmp table without line breaks
+
+#Not sure why we're filling in END.YEAR. Hope its okay.
+#This only works if length()==0 or ==1. It will break for length()>=2
+if (length(top_five_fmp_names %notin% unique(topFMP_table$FMP)) > 0) { # add a blank row for any missing FMPs so they appear in tables and plots for all areas
+  topFMP_table[nrow(topFMP_table)+1,] <- list(top_five_fmp_names %notin% unique(topFMP_table$FMP), 0, 0, 0, broadzone_underscore, as.character(END.YEAR), 0, 0, 0, 0, 0)
+}
+         
+
+
+topFMP <- topFMP_table
+# change extra long legend names - add a \n to halfway word 
+topFMP$FMP <- str_wrap(topFMP$FMP, width=30)
+
+topFMP$FMP <- reorder(topFMP$FMP, topFMP$yfa_rev)
+topFMP$FMP <- factor(topFMP$FMP, levels=levels(topFMP$FMP))
+
+
+lp <- ggplot(topFMP, aes(x = Year, y = yfa_land/1000000, fill = FMP)) +
+  guides(fill=guide_legend(title=NULL, reverse = TRUE)) +
+  geom_col(width=0.4) +
+  xlab(NULL) +
+  ylab("Millions of Pounds") +
+  # scale_y_continuous() +
+  scale_y_continuous(expand=expansion(mult=c(0,0.1))) + 
+  theme_bw() +
+  # theme_ipsum() +
+  coord_flip() +
+  ggtitle(paste0("Landings by FMPs, ", broadzone)) +
+  # theme(text=element_text(size=10, family="serif"),
+  theme(text=element_text(size=10),
+        panel.grid.major = element_line(colour="gray", size=0.5),
+        # plot.title = element_text(hjust = 0.5, size=18))
+        plot.title = element_text())
+
+# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale
+if (assignedColors) {
+  lp <- lp + uniquefmpScale
+} else {
+  lp <- lp + quantScale
+}
+
+# dispay plot
+print(lp)
+
+# save to file
+ggsave(filename = file.path(output_ftopfmp, paste0("Top5FMPLand_",substr(broadzone_underscore,0,30),".png")), plot = lp)
+# dev.off()
+rm(lp) # garbage collection - free up memory
+```
+
+```{r top_fmp_revenue_figure, results='asis', eval = top_fmp_section} 
+
+
+#######################################################################################
+# revenue area
+
+# change order of stack
+topFMP$FMP <- reorder(topFMP$FMP, topFMP$yfa_rev)
+topFMP$FMP <- factor(topFMP$FMP, levels=levels(topFMP$FMP))
+
+# plot
+# rp <- ggplot(topFMP, aes(x = Year, y = yfa_rev/1000000, fill = str_wrap(FMP, width = 30))) +
+rp <- ggplot(topFMP, aes(x = Year, y = yfa_rev/1000000, fill = FMP)) +
+  guides(fill=guide_legend(title=NULL, reverse = TRUE)) +
+  geom_col(width=0.4) +
+  xlab(NULL) +
+  ylab("Revenue in Millions") +
+  # scale_y_continuous(labels = dollar_format(prefix="$")) +
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
+  theme_bw() +
+  # theme_ipsum() +
+  coord_flip() +
+  ggtitle(paste0("Revenue by FMP, ", broadzone)) +
+  # theme(text=element_text(size=10, family="serif"),
+  theme(text=element_text(size=10),
+        panel.grid.major = element_line(colour="gray", size=0.5),
+        # plot.title = element_text(hjust = 0.5, size=18))
+        plot.title = element_text())
+
+# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale
+if (assignedColors) {
+  rp <- rp + uniquefmpScale
+} else {
+  rp <- rp + quantScale
+}
+# dispay plot
+print(rp)
+# if number of top 5 fmps for all areas are not the same and are more than the maximum number of colors of the RColorBrewer color palette dont use custom
+# ifelse(length(unique(top5byArea$FMP)) > 12, print(rp), print(rp + colScale))
+# save to file
+ggsave(paste0(output_ftopfmp, "/Top5FMPRev_", substr(broadzone_underscore, 0,30),".png"), plot = rp)
+# save to file - base functions
+# png(paste0(output_ftopfmp,"/Top5FMPRev_",broadzone,".png"))
+# print(rp)
+# dev.off()
+rm(rp)
+# alternatively, save plot as png and call
+# knitr::include_graphics("rrtools-steps-carbon.png")
+```
+
+Figures \ref{fig:top_fmp_landings_plots} and \ref{top_fmp_revenue_figure} describe landings and revenue from 2012 to 2016 that occured within the NCSMNM boundary addition disaggregated by FMP and year. These figures provide insight into annual flows of benefits of resuming fishing in the NCSMNM addition and the types of firms to which those benefits would accrue *in the baseline*.  Tables \ref{tab:top_fmp_landings_table} and \ref{tab:top_fmp_revenue_table} present totals over this five year time period.
+
+```{r top_fmp_landings_table, eval = top_fmp_section} 
+
+# sort by landings
+allyrland_table <- topFMP_table %>%
+  distinct(FMP, allyrtotal_rev, allyrtotal_land) %>%
+  arrange(desc(allyrtotal_land)) %>%
+  # arrange(desc(allyearland_total)) %>%
+  dplyr::select(FMP, allyrtotal_land) %>% 
+  dplyr::rename("All Year Total" = allyrtotal_land) %>% 
+  ungroup()
+
+# convert fmp back to charaters - add totals row - format Landings column w/ $, commas, and rounded for estimation - *non-pipe way
+allyrland_table$FMP <- as.character(allyrland_table$FMP)
+allyrland_table <- rbind(allyrland_table, c("**Total**", colSums(allyrland_table[,2])))
+# allyrland_table$`All Total` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyrland_table$`All Total`))
+allyrland_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE))) < 500,"<500", comma_format(trim = TRUE, accuracy = 1000)(as.numeric(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
+allyrland_table[nrow(allyrland_table),2] <- paste0("**",allyrland_table[nrow(allyrland_table),2],"**")
+
+# set dynamic varible names (cant use paste0 in rename in tidyverse)
+
+# allyrland_table %>% rename_at()
+
+# names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- paste0(numyear, " Year Total")
+names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- paste0(numyear, " Year Landings")
+
+kbl(allyrland_table, booktabs=T,  align=c("l",rep('r',times=1)), caption = "2012-2016-Year Total Landings (Pounds)")  %>%
+      kable_styling(full_width = F)
+```
+
+```{r top_fmp_revenue_table,  eval = top_fmp_section} 
+
+# names(topFMP)
+# create 5 year (all years) table
+allyrrev_table <- topFMP_table %>% distinct(FMP, allyrtotal_rev) %>%
+  arrange(desc(allyrtotal_rev)) %>%
+  dplyr::rename("All Year Revenue" = allyrtotal_rev) %>% 
+  ungroup()
+# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
+
+# convert fmp back to charaters - add totals row - format revenue column w/ $, commas, and rounded for estimation - *non-pipe way
+allyrrev_table$FMP <- as.character(allyrrev_table$FMP)
+allyrrev_table <- rbind(allyrrev_table, c("**Total**", colSums(allyrrev_table[,2])))
+# allyrrev_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyrrev_table$`All Year Revenue`))
+allyrrev_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE))) < 500,"<$500", comma_format(trim = TRUE, accuracy = 1000, prefix="$")(as.numeric(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
+allyrrev_table[nrow(allyrrev_table),2] <- paste0("**",allyrrev_table[nrow(allyrrev_table),2],"**")
+
+# set dynamic varible names (cant use paste0 in rename in tidyverse)
+names(allyrrev_table)[names(allyrrev_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
+
+kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=1)), caption = "2012-2016 Total Value (Real USD)")  %>%
+      kable_styling(full_width = F)
+
+
+```
+
+
+Figures \ref{landings_plot_by_gear} to \ref{revenue_plot_by_gear} describe landings from 2012 to 2020 that occurred within the NCSMNM boundary addition. They are disaggregated by gear to provide some insight into the possible declines in the stock of habitat in the area if fishing resumed.  Some types of gear (say midwater trawl or handline) has minimal effects on the ocean bottom compared to others (say Trawl or Dredge). Tables \ref{tab:landings_table_by_gear} and \ref{tab:revenue_table_by_gear} present totals over this five year time period.
+
+```{r landings_plot_by_gear, eval = select_gear_section}  
+# REVENUEFILE <- REVENUEFILE_backup
+
+# create new folder for section
+dir.create(file.path(output_f, "selectgeartype"), showWarnings = FALSE)
+output_fselectgeartype = file.path(output_f, "selectgeartype")
+
+
+
+###############################
+#### Set Select Gear Types ####
+###############################
+
+# New gear types specificed by Min-Yang
+select_gear_codes <- as_tibble(REVENUEFILE) %>%
+ filter(!FMP %in% c("SERO FMP","Highly Migratory Species","No Federal FMP", "ASMFC FMP")) %>% 
+  filter(Area != "Other") %>% 
+  mutate(gearcat_new = "") %>% 
+  # select(IDNUM, GEARCODE, gearcat_new) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('DRM','DRO','DRU','DRC', 'DRS','DTS','DTC', 'DSC'), 'DREDGE', gearcat_new)) %>%
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('GNS'), 'GILLNET-SINK', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('GND', 'GNO','GNR','GNT'), 'GILLNET-OTHER', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('FYK','WEI','TRP'), 'WEIR-TRAP', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('PUR'), 'SEINE-PURSE', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('SED','SEH','SES','STS'), 'SEINE-OTHER', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('HND', 'LLB', 'LLP'), 'LINE', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('RAK','DIV','HRP','CST'), 'HAND-OTHER', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('OBP', 'OHS','OTB','OTC','OTF','OTO','OTR','OTS','OTT','PTB', 'TTS'), 'TRAWL-BOTTOM', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('PTM','OTM'), 'TRAWL-MIDWATER', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('PTC','PTE','PTF','PTH', 'PTO','PTS','PTW','PTX', 'PTL'), 'POT', gearcat_new)) %>% 
+  mutate(gearcat_new = ifelse(GEARCODE %in% c('OTH'), 'OTHER', gearcat_new)) %>%  
+  mutate(gearcat_new = ifelse(gearcat_new == "", '[blank]', gearcat_new)) 
+  
+###################################
+#### Set Select Gear Types end ####
+###################################
+
+
+################################################################
+#### Create Dataframe of Select Gear Types with PII Removed ####
+################################################################
+
+# PII fixed for all areas
+piiselect_gear_codes <- subset(select_gear_codes, !is.na(gearcat_new)) %>%
+  # dplyr::select(gearcat_new, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
+  dplyr::select(gearcat_new, Year, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM) %>% # for dealers
+  filter(Area != "Other") %>% 
+  group_by(gearcat_new, Year, Area) %>%
+  dplyr::summarize(
+    InsideREV = sum(InsideREV, na.rm = T),
+    InsideLANDED = sum(InsideLANDED, na.rm = T),
+    npermits = length(unique(PERMIT)),
+    ndealers = length(unique(DEALNUM))
+    ) %>%
+  # mutate(CONF =  npermits < 3) %>%
+  # mutate(CONF2 = ndealers < 3) %>%
+  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
+  mutate(gearcat_new_CONF = ifelse(CONF == T, 'Other Gear', gearcat_new)) %>%
+  ungroup() %>%
+  # dplyr::select(-starts_with("gearcat_new")) %>%
+  # dplyr::select(Year, InsideREV, InsideLANDED, npermits, gearcat_new_CONF) %>%
+  group_by(gearcat_new_CONF, Year, Area) %>%
+  dplyr::summarize(
+    yfa_rev = sum(InsideREV, na.rm = T),
+    yfa_land = sum(InsideLANDED, na.rm = T),
+    npermits = sum(npermits, na.rm = T)) %>% 
+  dplyr::rename("Gear_Type"= gearcat_new_CONF)
+
+gear_codesallyr_total <- piiselect_gear_codes %>% dplyr::select(Gear_Type, Year, Area, yfa_rev, yfa_land) %>% 
+  group_by(Gear_Type, Area) %>% 
+  dplyr::summarize(
+    allyrtotal_rev = sum(yfa_rev, na.rm = T),
+    allyrtotal_land = sum(yfa_land, na.rm = T)
+  )
+
+# gear_Type_merge <- merge(piiselect_gear_codes, gear_codesallyr_total, by = c("Gear_Type", "Area"))
+# keep as tibble - use dplyr functions insead of base
+gear_type_merge <- left_join(piiselect_gear_codes, gear_codesallyr_total, by = c("Gear_Type", "Area"))
+
+# Fix error with monkfish FMP by subtracting 227014.9999 from revenue
+# PIISPPNMAllYears[which(PIISPPNMAllYears$FMP == 'MONKFISH JOINT'),"InsideREV_total"] <- PIISPPNMAllYears[which(PIISPPNMAllYears$FMP=='MONKFISH JOINT'),"InsideREV_total"]-227014.9999
+
+#################################################################
+#### Create Dataframe of Select Gear_Type with PII Removed end ####
+#################################################################
+
+############################################
+#### Set plot colors for select species ####
+############################################
+# create custom color palette for all other unique FMPs 
+# (length(unique(gear_type_merge$FMP))-5)
+selectGear_TypebyArea <- gear_type_merge %>% group_by(Gear_Type, Area) %>%
+  dplyr::summarize(
+    REV = sum(yfa_rev, na.rm = T)
+    ) %>% 
+  ungroup %>% 
+  group_by(Area) %>% 
+  # top_n(., n=((length(unique(gear_type_merge$Gear_Type))-5)*-1), wt=REV) %>% 
+  arrange(Area, desc(REV)) %>% 
+  ungroup %>% 
+  mutate(Gear_Type = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(Gear_Type), perl=TRUE)) 
+
+NumUniqueMargins <- length(unique(selectGear_TypebyArea$Gear_Type))
+
+UniqueMargins <- unique(selectGear_TypebyArea$Gear_Type)
+
+# make extra colors if more unique Gear_Types than maximum colors for palette
+if (NumUniqueMargins > maxUniqueColors) {
+  getPalette = colorRampPalette(brewer.pal(maxUniqueColors, paletteName3))
+  myColors <- getPalette(NumUniqueMargins) 
+} else {
+  myColors <- brewer.pal(NumUniqueMargins, paletteName3) # create list of colors using number of unique Gear_Types from pallettte name
+}
+
+names(myColors) <- UniqueMargins # name colors for color scale
+
+uniqueSelectGear_TypeScale <- scale_fill_manual(name = NULL, values = myColors, guide = guide_legend(reverse = TRUE))
+
+# original color scale based on revenue quanities
+quantGear_TypeScale <- scale_fill_viridis(discrete=TRUE)
+
+rm(NumUniqueMargins, UniqueMargins) # garbage collection
+
+
+broadzone <-allZones[1]
+
+
+#### get rev and landing plots and tables for all zones
+  broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", broadzone)), perl=TRUE) # make spaces underscores and backslashs as dashes in area
+
+###################################################################
+# landings plot and table
+  
+# filter by area
+sGear_TypeArea <- gear_type_merge %>% filter(Area == broadzone_underscore)
+
+# make Gear_Type names lowercase
+sGear_TypeArea$Gear_Type <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(sGear_TypeArea$Gear_Type), perl=TRUE)
+# sGear_TypeArea$Gear_Type[sGear_TypeArea$Gear_Type=="None"] <- "No Federal FMP"
+
+# change order of stack
+sGear_TypeArea$Gear_Type <- reorder(sGear_TypeArea$Gear_Type, sGear_TypeArea$yfa_land)
+sGear_TypeArea$Gear_Type <- factor(sGear_TypeArea$Gear_Type, levels=levels(sGear_TypeArea$Gear_Type))
+
+# sGear_TypeArea$Gear_Type <- reorder(sGear_TypeArea$Gear_Type, sGear_TypeArea$sum_rev)
+# sGear_TypeArea$Gear_Type <- factor(sGear_TypeArea$Gear_Type, levels=levels(sGear_TypeArea$Gear_Type))
+
+
+# plot
+lp <- ggplot(sGear_TypeArea, aes(x = Year, y = yfa_land/1000000, fill=Gear_Type)) +
+  geom_col(width=0.4) +
+  xlab(NULL) +
+  ylab("Millions of Pounds") +
+  # scale_y_continuous() +
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) + 
+  theme_bw() +
+  # theme_ipsum() +
+  coord_flip() +
+  ggtitle(paste0(" Landings of Select Gear Types, ",broadzone)) +
+  # theme(text=element_text(size=10, family="serif"),
+  theme(text=element_text(size=10),
+        panel.grid.major = element_line(colour="gray", size=0.5),
+        # plot.title = element_text(hjust = 0.5, size=18))
+        plot.title = element_text())
+
+# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
+if (assignedColors) {
+  lp <- lp + uniqueSelectGear_TypeScale
+} else {
+  lp <- lp + quantGear_TypeScale
+}
+# dispay plot
+print(lp)
+
+```
+
+```{r revenue_plot_by_gear, eval = select_gear_section}  
+###################################################################
+# revenue plot and table
+
+rm(sGear_TypeArea)
+
+sGear_TypeArea <- gear_type_merge %>% filter(Area == broadzone_underscore)
+
+# make FMP names lowercase
+sGear_TypeArea$Gear_Type <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(sGear_TypeArea$Gear_Type), perl=TRUE)
+# sGear_TypeArea$Gear_Type[sGear_TypeArea$Gear_Type=="None"] <- "No Federal FMP"
+
+# change order of stack
+sGear_TypeArea$Gear_Type <- reorder(sGear_TypeArea$Gear_Type, sGear_TypeArea$yfa_rev)
+sGear_TypeArea$Gear_Type <- factor(sGear_TypeArea$Gear_Type, levels=levels(sGear_TypeArea$Gear_Type))
+
+
+# plot
+rp <- ggplot(sGear_TypeArea, aes(x = Year, y = yfa_rev/1000000, fill=Gear_Type)) +
+  geom_col(width=0.4) +
+  xlab(NULL) +
+  ylab("Revenue in Millions") +
+  # scale_y_continuous(labels = dollar_format(prefix="$")) +
+  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
+  theme_bw() +
+  # theme_ipsum() +
+  coord_flip() +
+  ggtitle(paste0("Revenue from Select Gear Types, ", broadzone)) +
+  # theme(text=element_text(size=10, family="serif"),
+  theme(text=element_text(size=10),
+        panel.grid.major = element_line(colour="gray", size=0.5),
+        # plot.title = element_text(hjust = 0.5, size=18))
+        plot.title = element_text())
+
+# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
+if (assignedColors) {
+  rp <- rp + uniqueSelectGear_TypeScale
+} else {
+  rp <- rp + quantGear_TypeScale
+}
+# dispay plot
+print(rp)
+# save to file
+ggsave(paste0(output_fselectgeartype, "/Select_Gear_Type_Rev_", substr(broadzone_underscore,0,30),".png"), plot = rp)
+rm(rp)
+```
+
+```{r landings_table_by_gear, eval = select_gear_section}  
+
+# sort by landings
+allyrland_table <- subset(sGear_TypeArea, select = -Year ) %>%  
+  # select(Gear_Type, allyrtotal_rev, allyrtotal_land) %>% 
+  distinct(Gear_Type, allyrtotal_rev, allyrtotal_land) %>%
+  arrange(desc(allyrtotal_land)) %>%
+  # arrange(desc(allyearland_total)) %>%
+  dplyr::select(Gear_Type, allyrtotal_land) %>% 
+  dplyr::rename("All Year Total" = allyrtotal_land) %>% 
+  dplyr::rename("Gear Type" = Gear_Type) %>% 
+  ungroup()
+  
+# convert fmp back to charaters - add totals row - format Landings column w/ $, commas, and rounded for estimation - *non-pipe way
+allyrland_table$"Gear Type" <- as.character(allyrland_table$"Gear Type")
+allyrland_table <- rbind(allyrland_table, c("**Total**", colSums(allyrland_table[,2]))) # allyrland_table must be a tibble and without year column for this to work
+# allyrland_table$`All Year Total` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyrland_table$`All Year Total`))
+allyrland_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE))) < 500,"<500", comma_format(trim = TRUE, accuracy = 1000)(as.numeric(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
+allyrland_table[nrow(allyrland_table),2] <- paste0("**",allyrland_table[nrow(allyrland_table),2],"**")
+
+# set dynamic varible names (cant use paste0 in rename in tidyverse)
+names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- paste0(numyear, " Year Landings")
+
+
+print(kable(allyrland_table, caption = paste0(numyear, ' Year Total Landings (Pounds), Select Gear Types, ',broadzone), align=c('l', 'r')))
+```
+
+```{r revenue_table_by_gear, eval = select_gear_section}  
+##########################################################################
+
+# sort by revenue
+allyrrev_table <- subset(sGear_TypeArea, select = -Year ) %>%  
+  # select(Gear_Type, allyrtotal_rev, allyrtotal_land) %>% 
+  distinct(Gear_Type, allyrtotal_rev) %>%
+  arrange(desc(allyrtotal_rev)) %>%
+  # arrange(desc(allyearland_total)) %>%
+  dplyr::select(Gear_Type, allyrtotal_rev) %>% 
+  dplyr::rename("All Year Total" = allyrtotal_rev) %>% 
+  dplyr::rename("Gear Type" = Gear_Type) %>% 
+  ungroup()
+  
+# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
+# TODO: add number to word function
+
+# convert fmp back to charaters - add totals row - format Landings column w/ $, commas, and rounded for estimation - *non-pipe way
+allyrrev_table$"Gear Type" <- as.character(allyrrev_table$"Gear Type")
+allyrrev_table <- rbind(allyrrev_table, c("**Total**", colSums(allyrrev_table[,2]))) # allyrrev_table must be a tibble and without year column for this to work
+allyrrev_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE))) < 500,"<$500", comma_format(trim = TRUE, accuracy = 1000, prefix="$")(as.numeric(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
+allyrrev_table[nrow(allyrrev_table),2] <- paste0("**",allyrrev_table[nrow(allyrrev_table),2],"**")
+
+# set dynamic varible names (cant use paste0 in rename in tidyverse)
+names(allyrrev_table)[names(allyrrev_table) == "All Year Total"] <- paste0(numyear, " Year Revenue")
+
+cat("\n\n")
+
+print(kable(allyrrev_table, caption = paste0(numyear, ' Year Total Revenue, Select Gear Types, ', broadzone), align=c('l', 'r')))
+  
+cat("\n\n\n\n\n\n")
+
+
+```
 
 
 ## Economic impacts relative to the baseline
@@ -717,6 +1406,8 @@ A reduction in ecosystem benefits stemming from reduced protection in NCSMNM rep
 *Future activity*: The proposed action reduces the probability that commercial fishing will be allowed in NCSMNM.  Ecosytem benefits associated with these areas are preserved and compliance costs for regulated fishing firms, relative to a situation in which fishing allowed continue.
 
 
+\newpage
+
 
 ### Output 2: Which fisheries experience those changes in revenues.
 
@@ -735,11 +1426,7 @@ By ref
 
 ## Number of Small entities
 
-The directly regulated entities are the firms that currently hold at least 1 Northeast US fishing permit that could be used to fish in the Northeast Canyons and Seamounts. A few permit categories (Lobster: A1, A2, A4, A5, A5W, A6, and AOC; General Category Scallop B) were not included when constructing the set of directly regulated entities because these permit categories to not enable a vessel to fish in the Northeast Canyons and Seamounts areas.  There are a total of 1,338 small firms and 11 Large firms.  1,024 of the small firms derive the majority of their revenue from commerical fishing operations.  314 derive the majority of their revenue from for-hire recreational activities.  Firms that are classified as "for-hire" may still fish commerically -- these firms are included in the tabulation of directly regulated entities, although their main sourc of income (for-hire fishing) would not be directly impacted  by the proposed action. 
-
-Table \ref{tab:Directly_Regulated_Entities} describes numbers of directly regulated entities, their main activities, and their revenues from various sources. The distribution of gross receipts for both classes is highly right-skewed: there are many firms with a small to moderate amount of gross receipts and a handful of firms with much more economic activity. This results in the average receipts being higher than the 75$^th$ percentile of gross receipts for these two groups.
-
-
+The directly regulated entities are the firms that currently hold at least 1 Northeast US fishing permit that could be used to fish in the Northeast Canyons and Seamounts. A few permit categories (Lobster: A1, A2, A4, A5, A5W, A6, and AOC; General Category Scallop B) were not included when constructing the set of directly regulated entities because these permit categories to not enable a vessel to fish in the Northeast Canyons and Seamounts areas.  There are a total of 1,338 small firms and 11 Large firms.  1,024 of the small firms derive the majority of their revenue from commercial fishing operations.  314 derive the majority of their revenue from for-hire recreational activities.  Firms that are classified as "for-hire" may still fish commerically -- these firms are included in the tabulation of directly regulated entities, although their main source of income (for-hire fishing) would not be directly impacted  by the proposed action. 
 
 ```{r Directly_Regulated_Entities, eval=TRUE}
 load(RFA_filepath)
@@ -811,10 +1498,9 @@ kbl(Directly_Regulated_Entities_table, digits=0,booktabs=T, align=c("l",rep('r',
     kable_styling(full_width = T)
 ```
 
+Table \ref{tab:Directly_Regulated_Entities} describes numbers of directly regulated entities, their main activities, and their revenues from various sources. The distribution of gross receipts for both classes is highly right-skewed: there are many firms with a small to moderate amount of gross receipts and a handful of firms with much more economic activity. This results in the average receipts being higher than the 75$^th$ percentile of gross receipts for these two groups.
+
 RFA requires using the trailing three years to determine whether an entity is small or large.  Using this time period (2019-2021) would underestimate the importance of the NCSMNM to these firms, because the area was not open to fishing for much of this time.  Therefore, the fishing activity during the 2012-2016 time period are used characterize the importance of NCSMNM.  Only commercial fishing activity is described. Table \ref{tab:Firm_average_in_Area} describes the Gross Receipts from all sources and from just within the NCSMNM addition. Table \ref{tab:AnyInside} describes the Gross Receipts from all sources and from just within the NCSMNM addition only for firms that fished inside the NCSMNM addition area.  None of the firms classified as "For-Hire" firms were active inside the NCSMNM addition area.
-
-Tables \ref{tab:Firm_average_in_Area}  and \ref{tab:AnyInside} suggest that the additional NCSMNM area are not often used by fishing firms.  Compliance costs, measured as foregone revenue from this area, are expected to be low.  On average, firms derived less than 1\% of fishing revenue from this area.
-
 
 ```{r Firm_average_in_Area}
 aff_key <- affiliates %>%
@@ -859,6 +1545,8 @@ kbl(DRE_2012_2016Firms, digits=0,booktabs=T,  align=c("l",rep('r',times=6)), cap
     kable_styling(full_width = T)
 ```
 
+Tables \ref{tab:Firm_average_in_Area}  and \ref{tab:AnyInside} suggest that the additional NCSMNM area are not often used by fishing firms.  Compliance costs, measured as foregone revenue from this area, are expected to be low.  On average, firms derived less than 1\% of annual fishing revenue from this area, and typically substantially less than this.  
+
 ```{r AnyInside}
 
 DRE_2012_2016InsideOnly <- Firm_activity %>%
@@ -885,51 +1573,6 @@ kbl(DRE_2012_2016InsideOnly, digits=0,booktabs=T,  align=c("l",rep('r',times=6))
 
 ```
 
-
-```{r BoxPlot,eval=FALSE}
-# Box plots of firm revenue inside the Zone.  No point in doing it like this -- instead, merge it to the exisitng bit.s
-
-Firm_totals<-Firm_activity %>%
-  filter(Type !="NO_REV") %>%
-  group_by(Size,Year,affiliate_id) %>%
-  summarise("Gross Receipts"=round(sum(TotalREV),0),
-            "Gross Receipts NCSMNM"=round(sum(InsideREV),0),
-  ) %>%
-  mutate("Percent NCSMNM" = `Gross Receipts NCSMNM`/`Gross Receipts`)
-
-z<- "Small"
-
-firm_boxplot <- Firm_totals %>% filter(Size==z)
- 
-boxplot <- ggplot(data = firm_boxplot, aes(x = Year, y = `Percent NCSMNM`, fill=Year)) +
-  geom_boxplot(linetype = "dashed", outlier.shape = 1) +
-  stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), outlier.shape = 1) +
-  stat_boxplot(geom = "errorbar", aes(ymin = ..ymax..)) +
-  stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..)) +
-  scale_fill_viridis(discrete=TRUE) + +
-  coord_flip() +
-  labs(title = paste0("Small Firms Annual Revenue Percentage Boxplots"),
-       x = NULL,
-       y = "Percent Total Revenue by Permit") +
-  theme_bw() +
-  theme(text=element_text(size=10),
-        legend.position="none", plot.title = element_text(hjust = 0.5,size = 14), 
-        panel.border = element_rect(linetype = "solid",
-                                    colour = "black", 
-                                    fill = "NA", 
-                                    size = 0.5))
-  
-
-print(boxplot)
-ggsave(file.path(root.image.path,paste0("affiliate_",z,".png")), plot = boxplot)
-rm(boxplot)
-
-
-
-
-
-
-```
 
 
 ```{r Firm_Totals_in_Area, eval=FALSE}
@@ -1035,2474 +1678,7 @@ An identification, to the extent practicable, of all relevant Federal rules, whi
 
 
 
-\newpage
-
-```{r fmp_top_five_dynamic_text, results='asis', eval = T} 
-
-# sort(names(REVENUEFILE))
-
-# unique(REVENUEFILE$FMP)
-# unique(REVENUEFILE$NESPP3)
-# test <- REVENUEFILE %>% filter(is.na(FMP))
-
-# Top 5 fmps after pii fix for all areas
-top_five_fmp_names <- REVENUEFILE %>%
-  filter(Area != "Other") %>%
- filter(!FMP %in% c("SERO FMP","Highly Migratory Species","No Federal FMP", "ASMFC FMP"))%>%
-  dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM) %>%
-  group_by(Year, FMP, Area) %>%
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
-  mutate(FMP_CONF = ifelse(CONF == T, 'All Others', FMP)) %>%
-  ungroup() %>%
-  group_by(Year, FMP_CONF, Area) %>%
-  dplyr::summarize(
-    yfa_rev = sum(InsideREV, na.rm = T),
-    yfa_land = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T)) %>% 
-  dplyr::rename("FMP"= FMP_CONF) %>% 
-  dplyr::select(FMP, Year, Area, yfa_rev, yfa_land) %>% 
-  # group_by(FMP, Area) %>% 
-  group_by(FMP) %>% 
-  dplyr::summarize(
-    allyrtotal_rev = sum(yfa_rev, na.rm = T),
-    allyrtotal_land = sum(yfa_land, na.rm = T)) %>% 
-  arrange(desc(allyrtotal_rev)) %>% 
-  ungroup() %>% 
-  top_n(n=10, wt=allyrtotal_rev) %>% 
-  pull(FMP)
-
-# Might be an issue of top 5 FMP has 0 revenue
-
-if (any(top_five_fmp_names %in% "No Federal FMP")) {
-  topfmp_names <- paste0(top_five_fmp_names[!top_five_fmp_names %in% "No Federal FMP"], collapse = ", ")
-  topfmp_names <- paste0(topfmp_names, " and No Federal FMP")
-} else {
-  topfmp_names <- paste0(top_five_fmp_names %notin%  tail(top_five_fmp_names, n=1), collapse = ", ")
-  topfmp_names <-paste0(topfmp_names, " and ", tail(top_five_fmp_names, n=1))
-}
-
-# length(unique(REVENUEFILE[which(REVENUEFILE$FMP == "None" & REVENUEFILE$InsideREV > 0),]$SPPNM))
-
-piifmpsppnm_allyrs <- REVENUEFILE %>% 
-  filter(Area != "Other") %>% 
- filter(!FMP %in% c("SERO FMP","Highly Migratory Species","No Federal FMP", "ASMFC FMP"))%>%
-  # dplyr::select(FMP, SPPNM, Year, InsideREV, InsideLANDED, PERMIT) %>%
-  dplyr::select(FMP, SPPNM, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
-  group_by(FMP, SPPNM) %>%
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF =  npermits < 3) %>%
-  # mutate(CONF2 = ndealers < 3) %>%
-  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
-  mutate(FMP_CONF = ifelse(CONF == T, 'All Others', FMP)) %>%
-  mutate(SPPNM_CONF = ifelse(CONF == T, 'All Others', SPPNM)) %>%
-  ungroup() %>%
-  # dplyr::select(-starts_with("FMP")) %>%
-  dplyr::select(InsideREV, InsideLANDED, npermits, FMP_CONF, SPPNM_CONF) %>%
-  group_by(FMP_CONF, SPPNM_CONF) %>%
-  dplyr::summarize(
-    InsideREV_total = sum(InsideREV, na.rm = T),
-    InsideLANDED_total = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T)) %>%
-  arrange(desc( InsideREV_total)) %>%
-  dplyr::rename("FMP"= FMP_CONF,"SPPNM"= SPPNM_CONF, "All Year Revenue" = InsideREV_total, "All Year Landings (Pounds)" = InsideLANDED_total)
-  
-numsp <- length(unique(piifmpsppnm_allyrs$SPPNM))
-
-
-# -if areas dont have same top FMP ??
-
-
-```
-
-<!-- ## Sections {.tabset .tabset-fade .tabset-pills} -->
-
-```{r top_fmp_plots, results='asis', eval = top_fmp_section} 
-##########################################################################
-
-# create new folder for section
-dir.create(file.path(output_f, "topfmp"), showWarnings = FALSE)
-output_ftopfmp = file.path(output_f, "topfmp")
-
-section_num = section_num + 1
-figure_num = 0
-
-# DO NOT USE THIS TABLE FOR ANYTHING OTHER THAN DETERMINING THE NAMES OF THE TOP FMPS FOR THE AREA(S) - GROUPING FOR PII WILL MESS UP TOTALS 
-# Get top revenue FMPs, sorted by revenue, grouped by FMPs for all years and remove PII - ** this list order will be used for all areas
-allYearsSum <- REVENUEFILE %>% # FMP NAs are already removed in the DMIS cleaning code chunk
-  filter(Area != "Other") %>% 
-  # dplyr::select(FMP, InsideREV, InsideLANDED, PERMIT) %>%
-  dplyr::select(FMP, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
-  group_by(FMP) %>% # Using only FMP as grouping will mess up uniqueness of dealers and permits
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF = npermits < 3) %>%
-  # mutate(CONF2 =  ndealers < 3) %>%
-  mutate(CONF = npermits < 3 | ndealers < 3) %>%
-  mutate(FMP_CONF = ifelse(CONF == T, 'All Others', FMP)) %>%
-  ungroup() %>%
-  # dplyr::select(-starts_with("FMP")) %>%
-  dplyr::select(InsideREV, InsideLANDED, npermits, FMP_CONF) %>%
-  group_by(FMP_CONF) %>%
-  dplyr::summarize(
-    InsideREV_total = sum(InsideREV, na.rm = T),
-    InsideLANDED_total = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T)) %>% 
-  dplyr::rename("FMP"= FMP_CONF)
-
-# PII fixed for all areas
-piifmp <- REVENUEFILE %>%
-  filter(Area != "Other") %>% 
-  # dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
-  dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM) %>% # for dealers
-  group_by(Year, FMP, Area) %>%
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF =  npermits < 3) %>%
-  # mutate(CONF2 =  ndealers < 3) %>%
-  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
-  mutate(FMP_CONF = ifelse(CONF == T, 'All Others', FMP)) %>%
-  ungroup() %>%
-  # dplyr::select(-starts_with("FMP")) %>%
-  # dplyr::select(Year, InsideREV, InsideLANDED, npermits, FMP_CONF) %>%
-  group_by(Year, FMP_CONF, Area) %>%
-  dplyr::summarize(
-    yfa_rev = sum(InsideREV, na.rm = T),
-    yfa_land = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T)) %>% 
-  dplyr::rename("FMP"= FMP_CONF)
-
-fmpallyr_total <- piifmp %>% dplyr::select(FMP, Year, Area, yfa_rev, yfa_land) %>% 
-  group_by(FMP, Area) %>% 
-  dplyr::summarize(
-    allyrtotal_rev = sum(yfa_rev, na.rm = T),
-    allyrtotal_land = sum(yfa_land, na.rm = T)
-  )
-
-fmp_merge <- merge(piifmp, fmpallyr_total, by = c("FMP", "Area"))
-
-# write.csv(fmp_merge, file="fmp_merge.csv", row.names=FALSE)
-
-# create workbook object for Excel output outside loop
-mostimpactedland_wb <- createWorkbook(creator = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("\\."," ", unname(Sys.info()["user"]))), perl=TRUE), title = "TopFMPLand") # get user full name
-mostimpactedrev_wb <- createWorkbook(creator = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("\\."," ", unname(Sys.info()["user"]))), perl=TRUE), title = "TopFMPRev") # get user full name
-# write to Excel workbook object - sheet name based on letters of area name and with area order number to differenciate incase of duplicate letters
-# add sheet of all years
-addWorksheet(mostimpactedland_wb, "TopFMP_AllAreas", gridLines = TRUE)
-writeData(mostimpactedland_wb, sheet = "TopFMP_AllAreas", fmp_merge, keepNA = TRUE)
-addWorksheet(mostimpactedrev_wb, "TopFMP_AllAreas", gridLines = TRUE)
-writeData(mostimpactedrev_wb, sheet = "TopFMP_AllAreas", fmp_merge, keepNA = TRUE)
-
-
-# create a table with a bunch of differently grouped totals that will be filtered by area during the iteration of the graphs
-topFMP_all_areas <- left_join(allYearsSum, fmp_merge, by='FMP') %>% 
-  filter(FMP %in% top_five_fmp_names) # top_five_fmp_names is from the summary creater section 
-
-
-# get top fmps by revenue, overall
-top5fmps <- fmp_merge %>% group_by(FMP) %>%
-  dplyr::summarize(
-    REV = sum(yfa_rev, na.rm = T)
-    ) %>% 
-  ungroup %>% 
-  top_n(., n=10, wt=REV) %>% 
-  arrange(desc(REV)) %>% 
-  ungroup
-  # ungroup %>% 
-  # mutate(FMP = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(FMP), perl=TRUE)) %>% 
-  # mutate(FMP = if_else(FMP=="None","No Federal FMP", FMP))
-
-# top5fmps <- fmp_merge %>% group_by(FMP) %>%
-#   dplyr::summarize(
-#     REV = sum(allyrtotal_rev, na.rm = T)
-#     ) %>%
-#   ungroup %>%
-#   top_n(., n=5, wt=REV) %>%
-#   arrange(desc(REV)) %>%
-#   ungroup()
-
-topfmp_names_wrapped <- str_wrap(unique(top5fmps$FMP), width=30) # change extra long legend names - add a \n to halfway word to match plot
-
-NumUniqueMargins <- length(unique(top5fmps$FMP))
-
-UniqueMargins <- str_wrap(unique(top5fmps$FMP), width=30) # change extra long legend names - add a \n to halfway word to match plot
-
-# make extra colors if more unique FMPs than maximum colors for palette
-if (NumUniqueMargins > maxUniqueColors) {
-  getPalette = colorRampPalette(brewer.pal(maxUniqueColors, paletteName1))
-  myColors <- getPalette(NumUniqueMargins)
-} else {
-  myColors <- brewer.pal(NumUniqueMargins, paletteName1) # create list of colors using number of unique FMPs from pallettte name
-  }
-
-names(myColors) <- UniqueMargins # name colors for color scale
-
-# create custom color scale assigned to each fmp to use on all top fmp plots
-uniquefmpScale <- scale_fill_manual(name = NULL, values = myColors, guide = guide_legend(reverse = TRUE))
-
-topfmpColors <- myColors
-
-rm(NumUniqueMargins, UniqueMargins) # garbage collection
-
-# uniquefmpScale <- make_color_scale(top5fmps$FMP, scale_name = paletteName1, maxUniqueColors = maxUniqueColors, wrap_names = TRUE)
-
-# original color scale based on revenue quanities - subjective to areas
-quantScale <- scale_fill_viridis(discrete=TRUE)
-
-#####################################
-#### Set Top FMP Plot Colors end ####
-#####################################
-
-
-###########################################################
-############ get only data for select area ###########
-###########################################################
-# ### replace underscores with space and capitalize each word (for plot title automation)
-# broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE)
-
-# topFMP <- left_join(head(allYearsSum[order(-allYearsSum$InsideREV_total),],5), fmp_merge, by='FMP')
-
-#### get rev and landing plots and tables for all zones
-for (broadzone in allZones) {
-  figure_num = figure_num + 1
-  # broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE) # make name pretty
-  # cat("\raggedright")
-  # cat(paste0("*", broadzone, "*", "  ", "\n\n"),"  ") # display name of broadzone on vignette
-  # broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", broadzone), perl=TRUE) # make spaces underscores in area 
-  broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", broadzone)), perl=TRUE) # make spaces underscores and backslashs as dashes in area 
-  
-# filter grouped totals table by the current area
-topFMP_table <- topFMP_all_areas %>% filter(Area == broadzone_underscore)#create top fmp table without line breaks
-
-#Not sure why we're filling in END.YEAR. Hope its okay.
-#This only works if length()==0 or ==1. It will break for length()>=2
-if (length(top_five_fmp_names %notin% unique(topFMP_table$FMP)) > 0) { # add a blank row for any missing FMPs so they appear in tables and plots for all areas
-  topFMP_table[nrow(topFMP_table)+1,] <- list(top_five_fmp_names %notin% unique(topFMP_table$FMP), 0, 0, 0, broadzone_underscore, as.character(END.YEAR), 0, 0, 0, 0, 0)
-}
-         
-
-
-
-# topFMP_table[nrow(topFMP_table)+1,] <- list(top_five_fmp_names %notin% unique(topFMP_table$FMP), 1, 1, 1, broadzone_underscore, 2119, 1, 1, 1, 1, 1)
-# glimpse(topFMP_table)
-
-topFMP <- topFMP_table
-# change extra long legend names - add a \n to halfway word 
-topFMP$FMP <- str_wrap(topFMP$FMP, width=30)
-
-topFMP$FMP <- reorder(topFMP$FMP, topFMP$yfa_rev)
-topFMP$FMP <- factor(topFMP$FMP, levels=levels(topFMP$FMP))
-
-# cat("\centering")
-cat("Figure ", section_num,".", figure_num, " Landings from Most Impacted FMPs, ", broadzone, "  \n\n", sep = "")
-
-# unique(topFMP$FMP)
-
-# plot
-# lp <- ggplot(topFMP, aes(x = Year, y = yfa_land/1000000, fill=str_wrap(FMP,20))) +
-# lp <- ggplot(topFMP, aes(x = Year, y = yfa_land/1000000, fill = str_wrap(FMP, width = 30))) +
-lp <- ggplot(topFMP, aes(x = Year, y = yfa_land/1000000, fill = FMP)) +
-  guides(fill=guide_legend(title=NULL, reverse = TRUE)) +
-  geom_col(width=0.4) +
-  xlab(NULL) +
-  ylab("Millions of Pounds") +
-  # scale_y_continuous() +
-  scale_y_continuous(expand=expansion(mult=c(0,0.1))) + 
-  theme_bw() +
-  # theme_ipsum() +
-  coord_flip() +
-  ggtitle(paste0("Landings from Most Impacted FMPs, ", broadzone)) +
-  # theme(text=element_text(size=10, family="serif"),
-  theme(text=element_text(size=10),
-        panel.grid.major = element_line(colour="gray", size=0.5),
-        # plot.title = element_text(hjust = 0.5, size=18))
-        plot.title = element_text())
-
-# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale
-if (assignedColors) {
-  lp <- lp + uniquefmpScale
-} else {
-  lp <- lp + quantScale
-}
-
-# dispay plot
-print(lp)
-
-# save to file
-ggsave(filename = file.path(output_ftopfmp, paste0("Top5FMPLand_",substr(broadzone_underscore,0,30),".png")), plot = lp)
-
-# save to file - base functions
-# png(paste0(output_ftopfmp,"/Top5FMPLand_",broadzone,".png")
-# print(lp)
-# dev.off()
-rm(lp) # garbage collection - free up memory
-# alternatively, save plot as png and call
-# knitr::include_graphics("rrtools-steps-carbon.png")
-
-# sort by landings
-allyrland_table <- topFMP_table %>%  
-  distinct(FMP, allyrtotal_rev, allyrtotal_land) %>%
-  arrange(desc(allyrtotal_land)) %>%
-  # arrange(desc(allyearland_total)) %>%
-  dplyr::select(FMP, allyrtotal_land) %>% 
-  dplyr::rename("All Year Total" = allyrtotal_land) %>% 
-  ungroup()
-
-# write to Excel workbook object - sheet name based on letters of area name and with area order number to differenciate incase of duplicate letters
-addWorksheet(mostimpactedland_wb, paste0("TopFMPL_", gsub(pattern="[a-z]?", replacement="", broadzone_underscore),"_",figure_num), gridLines = TRUE)
-writeData(mostimpactedland_wb, sheet = paste0("TopFMPL_", gsub(pattern="[a-z]?", replacement="", broadzone_underscore),"_",figure_num), allyrland_table, keepNA = TRUE)
-  
-# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
-# TODO: add number to word function
-
-# convert fmp back to charaters - add totals row - format Landings column w/ $, commas, and rounded for estimation - *non-pipe way
-allyrland_table$FMP <- as.character(allyrland_table$FMP)
-allyrland_table <- rbind(allyrland_table, c("**Total**", colSums(allyrland_table[,2])))
-# allyrland_table$`All Total` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyrland_table$`All Total`))
-allyrland_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE))) < 500,"<500", comma_format(trim = TRUE, accuracy = 1000)(as.numeric(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-allyrland_table[nrow(allyrland_table),2] <- paste0("**",allyrland_table[nrow(allyrland_table),2],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-
-# allyrland_table %>% rename_at()
-
-# names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- paste0(numyear, " Year Total")
-names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- paste0(numyear, " Year Landings")
-
-cat("\n\n")
-
-print(kable(allyrland_table, caption = paste0(numyear, ' Year Total Landings (Pounds), Most Impacted FMPs, ', broadzone), align=c('l', 'r')))
-  
-cat("\n\n\n\n\n\n")
-  
-
-#######################################################################################
-# revenue area
-figure_num = figure_num + 1
-
-# change order of stack
-topFMP$FMP <- reorder(topFMP$FMP, topFMP$yfa_rev)
-topFMP$FMP <- factor(topFMP$FMP, levels=levels(topFMP$FMP))
-
-cat("Figure ", section_num,".", figure_num, " Revenue from Most Impacted FMPs, ", broadzone, "  \n\n", sep = "")
-
-# plot
-# rp <- ggplot(topFMP, aes(x = Year, y = yfa_rev/1000000, fill = str_wrap(FMP, width = 30))) +
-rp <- ggplot(topFMP, aes(x = Year, y = yfa_rev/1000000, fill = FMP)) +
-  guides(fill=guide_legend(title=NULL, reverse = TRUE)) +
-  geom_col(width=0.4) +
-  xlab(NULL) +
-  ylab("Revenue in Millions") +
-  # scale_y_continuous(labels = dollar_format(prefix="$")) +
-  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
-  theme_bw() +
-  # theme_ipsum() +
-  coord_flip() +
-  ggtitle(paste0("Revenue from Most Impacted FMPs, ", broadzone)) +
-  # theme(text=element_text(size=10, family="serif"),
-  theme(text=element_text(size=10),
-        panel.grid.major = element_line(colour="gray", size=0.5),
-        # plot.title = element_text(hjust = 0.5, size=18))
-        plot.title = element_text())
-
-# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale
-if (assignedColors) {
-  rp <- rp + uniquefmpScale
-} else {
-  rp <- rp + quantScale
-}
-# dispay plot
-print(rp)
-# if number of top 5 fmps for all areas are not the same and are more than the maximum number of colors of the RColorBrewer color palette dont use custom
-# ifelse(length(unique(top5byArea$FMP)) > 12, print(rp), print(rp + colScale))
-# save to file
-ggsave(paste0(output_ftopfmp, "/Top5FMPRev_", substr(broadzone_underscore, 0,30),".png"), plot = rp)
-# save to file - base functions
-# png(paste0(output_ftopfmp,"/Top5FMPRev_",broadzone,".png"))
-# print(rp)
-# dev.off()
-rm(rp)
-# alternatively, save plot as png and call
-# knitr::include_graphics("rrtools-steps-carbon.png")
-
-# names(topFMP)
-# create 5 year (all years) table
-allyrrev_table <- topFMP_table %>% distinct(FMP, allyrtotal_rev) %>%
-  arrange(desc(allyrtotal_rev)) %>%
-  dplyr::rename("All Year Revenue" = allyrtotal_rev) %>% 
-  ungroup()
-# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
-
-# write to Excel workbook object - sheet name based on letters of area name and with area order number to differenciate incase of duplicate letters
-addWorksheet(mostimpactedrev_wb, paste0("TopFMPR_", gsub(pattern="[a-z]?", replacement="", broadzone_underscore),"_",figure_num), gridLines = TRUE)
-writeData(mostimpactedrev_wb, sheet = paste0("TopFMPR_", gsub(pattern="[a-z]?", replacement="", broadzone_underscore),"_",figure_num), allyrrev_table, keepNA = TRUE)
-
-# convert fmp back to charaters - add totals row - format revenue column w/ $, commas, and rounded for estimation - *non-pipe way
-allyrrev_table$FMP <- as.character(allyrrev_table$FMP)
-allyrrev_table <- rbind(allyrrev_table, c("**Total**", colSums(allyrrev_table[,2])))
-# allyrrev_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyrrev_table$`All Year Revenue`))
-allyrrev_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE))) < 500,"<$500", comma_format(trim = TRUE, accuracy = 1000, prefix="$")(as.numeric(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-allyrrev_table[nrow(allyrrev_table),2] <- paste0("**",allyrrev_table[nrow(allyrrev_table),2],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrrev_table)[names(allyrrev_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
-
-cat("\n\n")
-
-print(kable(allyrrev_table, caption = paste0(numyear, ' Year Total Revenue for Most Impacted FMPs, ',broadzone), align=c('l', 'r')))
-
-cat("\n\n\n\n")
-
-}
-# save workbook to file with sheets of all area
-message("writing Excel Spreadsheets for Top FMPs..")
-saveWorkbook(mostimpactedland_wb, file = file.path(output_ftopfmp, paste0("TopFMPLand_",project_name,".xlsx")), overwrite = TRUE)
-saveWorkbook(mostimpactedrev_wb, file = file.path(output_ftopfmp, paste0("TopFMPRev_",project_name,".xlsx")), overwrite = TRUE)
-
-##########################################################################
-# rm(section_num, figure_num)
-
-
-```
-
-
-```{r top_fmp_summary, results='asis', eval = top_fmp_section_summary} 
-
-section_name = "Most Impacted FMPs"
-section_table <- get("topFMP_all_areas") %>% ungroup()
-margin <- "FMP"
-
-cat("<br>") 
-
-cat("*Summary*")
-
-if (single_area_summaries) {
-  all_rev <- allyrrev_table %>% filter(.data[[margin]] == '**Total**') %>% select(-.data[[margin]])
-  all_land <- allyrland_table %>% filter(.data[[margin]] =="**Total**") %>% select(-.data[[margin]])
-  rev_land_total <- cbind(all_rev, all_land)
-  row.names(rev_land_total) <- "**Total**"
-  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', section_name, ' '), align=c('r', 'r')))
-} else {
-  counter = 1
-  for (ar in allZones) {
-    if (counter == 1) {
-      ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-    allyr_table <- as_tibble(section_table %>%  
-      select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%     # use .data[[margin]] to refer to column name stored as string
-      filter(Area == ar_u) %>% 
-      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
-      arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
-      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate("{margin}" := as.character(.data[[margin]])) %>% # use '"{margin}" :=' to refer to a column as a string
-      ungroup()) # have to convert to tibble to add up rows
-    allyr_table <- rbind(allyr_table, c("**Total**", ar, colSums(allyr_table[,3]), colSums(allyr_table[,4])))
-    allyr_table <- allyr_table %>% filter(.data[[margin]] =="**Total**")
-    counter = 2
-  } else {
-    ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-    allyr_table_2 <- as_tibble(section_table %>%  
-      filter(Area == ar_u) %>% 
-      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
-      arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
-      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate("{margin}" := as.character(.data[[margin]])) %>% 
-      ungroup())
-    
-    allyr_table_2 <- rbind(allyr_table_2, c("**Total**", ar, colSums(allyr_table_2[,3]), colSums(allyr_table_2[,4])))
-    allyr_table_2 <- allyr_table_2 %>% filter(.data[[margin]] =="**Total**")
-    allyr_table <- rbind(allyr_table, allyr_table_2)
-    }
-  }
-
-  allyr_table <- allyr_table %>% select(-.data[[margin]]) %>% mutate(`All Year Revenue` = round(as.double(`All Year Revenue`), digits = -3)) %>% mutate(`All Year Landings (Pounds)` = round(as.double(`All Year Landings (Pounds)`), digits = -3))
-  allyr_table <- rbind(allyr_table, c('**Total**', colSums(allyr_table[,2]), colSums(allyr_table[,3])))
-  
-  # Format columns
-  allyr_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyr_table$`All Year Revenue`))
-  allyr_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyr_table$`All Year Landings (Pounds)`))
-  
-  # Make bottom rows bold
-  allyr_table[nrow(allyr_table),2] <- paste0("**", allyr_table[nrow(allyr_table),2],"**")
-  allyr_table[nrow(allyr_table),3] <- paste0("**", allyr_table[nrow(allyr_table),3],"**")
-  
-  # set dynamic varible names (cant use paste0 in rename in tidyverse)
-  names(allyr_table)[names(allyr_table) == "Area"] <- paste0(proper(area_adjective), "Area")
-  names(allyr_table)[names(allyr_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
-  names(allyr_table)[names(allyr_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
-  
-  print(kable(allyr_table, caption = paste0(section_name, ' ', numyear,' Year Revenue and Landings '), align=c('l', 'r', 'r')))  
-  
-  }
-
-```
-
-
-```{r other_impacted_fmps_dynamic_text, results='asis', echo=FALSE, eval = other_fmp_section} 
-
-# paste0(otherfmpsnames[-length(otherfmpsnames)], collapse = ", ")` 
-# 
-# paste0(" and ", otherfmpsnames[length(otherfmpsnames)])
-# 
-# paste0(" and ", otherfmpsnames[length(otherfmpsnames)])
-# 
-# ifelse(any(otherfmpsnames %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in the ", wind_area_name, "  area)."),".")
-# 
-# ifelse(any(otherfmpsnames %in% "All Others"), paste0(" The category \"All Others\" refers to FMPs with less than three permits impacted to protect data confidentiality. "),".")
-
-# ifelse(any(otherfmpsnames %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in the ", wind_area_name, "  area)."),".")
-
-otherfmpsnames <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(unique(fmp_merge$FMP) %notin% top_five_fmp_names), perl=TRUE)
-otherfmpsnames[otherfmpsnames=="None"] <- "No Federal FMP"
-
-```
-
-```{r other_impacted_fmps, results='asis', eval = other_fmp_section} 
-
-cat("<br> \n\n") 
-
-cat("### Other Impacted FMPs \n")
-
-cat("We analyzed other impacted FMPs separately in order to better visualize the estimated landings and revenues. The other impacted FMPs are: ", paste0(otherfmpsnames[-length(otherfmpsnames)], collapse = ", "), 
-paste0(" and ", otherfmpsnames[length(otherfmpsnames)]),". ", ifelse(any(otherfmpsnames %in% "No Federal FMP"), paste0(" and “No Federal FMP.” The category “No Federal FMP” contains a variety of species that are not federally regulated, such as: lobster, Jonah crab, smooth and chain dogfish, whelk, and menhaden, (there are close to ", numsp," species without federal FMPs caught in the ", wind_area_name, " area)."),""), 
-ifelse(any(otherfmpsnames %in% "All Others"), paste0("The category \"All Others\" refers to FMPs with less than three permits or dealers impacted to protect data confidentiality. "),"."),  rounded_message)
- 
-cat("<br> ")
-
-# We analyzed other impacted FMPs separately in order to better visualize the estimated landings and revenues. The other impacted FMPs are: Atlantic Herring, NE (Northeast); Monkfish, Joint; Skate, NE; NE Multispecies, Small; NE Multispecies, Large; Spiny Dogfish, Joint; Bluefish, Mid-Atlantic; Golden Tilefish, Mid-Atlantic; Red Crab, NE; River Herring, Joint; and Highly Migratory Species.
-
-##########################################################################
-# testing
-# save_files = "n" #dont save files as csv or rdata
-# save_files = "c"
-
-# create new folder for section
-dir.create(file.path(output_f, "otherfmp"), showWarnings = FALSE)
-output_fotherfmp = file.path(output_f, "otherfmp")
-
-section_num = section_num + 1
-figure_num = 0
-
-# Fix error with monkfish FMP by subtracting 227014.9999 from revenue
-
-# Replace 'None' with pretty wording 
-# REVENUEFILE$FMP[REVENUEFILE$FMP=="None"] <- "No Federal FMP"
-##########################################################################
-# Other FMP plot
-
-#######################################
-#### Set plot colors for other fmps ###
-#######################################
-# create custom color palette for all other unique FMPs 
-# (length(unique(fmp_merge$FMP))-5)
-
-# other FMPs ordered by revenue, grouped by area
-# otherfmpbyArea <- fmp_merge %>% group_by(FMP, Area) %>%
-#   dplyr::summarize(
-#     REV = sum(yfa_rev, na.rm = T)
-#     ) %>% 
-#   ungroup %>% 
-#   group_by(Area) %>% 
-#   top_n(., n=((length(unique(fmp_merge$FMP))-5)*-1), wt=REV) %>%  #colors may not be unique if top 5 is grouped by area
-#   arrange(Area, desc(REV)) %>% 
-#   ungroup %>% 
-#   mutate(FMP = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(FMP), perl=TRUE)) %>% 
-#   mutate(FMP = if_else(FMP=="None","No Federal FMP", FMP))
-# 
-# NumUniqueMargins <- length(unique(otherfmpbyArea$FMP))
-# 
-# UniqueMargins <- unique(otherfmpbyArea$FMP)
-
-# unique(fmp_merge$FMP) %notin% toupper(topfmp_names)
-
-# other FMPs ordered by revenue, overall
-otherfmp <- fmp_merge %>% group_by(FMP) %>%
-  dplyr::summarize(
-    REV = sum(yfa_rev, na.rm = T)
-    ) %>% 
-  ungroup %>% 
-  top_n(., n=((length(unique(fmp_merge$FMP))-5)*-1), wt=REV) %>%  #colors may not be unique if top 5 is grouped by area
-  arrange(desc(REV))
-  # arrange(desc(REV)) %>% 
-  # mutate(FMP = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(FMP), perl=TRUE)) %>% 
-  # mutate(FMP = if_else(FMP=="None","No Federal FMP", FMP))
-
-otherfmp_names_wrapped <- str_wrap(unique(otherfmp$FMP) %notin% names(topfmp_names_wrapped), width=30) # change extra long legend names - add a \n to halfway word to match plot
-
-
-
-###################################################################################################
-
-NumUniqueMargins <- length(unique(otherfmp$FMP))
-
-UniqueMargins <- str_wrap(unique(otherfmp$FMP) %notin% names(topfmpColors), width=30) # change extra long legend names - add a \n to halfway word to match plot
-
-
-# make extra colors if more unique FMPs than maximum colors for palette
-if (NumUniqueMargins > maxUniqueColors) {
-  getPalette = colorRampPalette(brewer.pal(maxUniqueColors, paletteName2))
-  myColors <- getPalette(NumUniqueMargins)
-} else {
-  myColors <- brewer.pal(NumUniqueMargins, paletteName2) # create list of colors using number of unique FMPs from pallettte name
-  }
-
-names(myColors) <- UniqueMargins # name colors for color scale
-
-# create custom color scale assigned to each fmp to use on all top fmp plots
-uniqueOtherfmpScale <- scale_fill_manual(name = NULL, values = myColors, guide = guide_legend(reverse = TRUE))
-
-otherfmpColors <- myColors
-
-rm(NumUniqueMargins, UniqueMargins) # garbage collection
-
-
-
-
-###########################################################
-
-
-###################################################################################################
-
-# uniqueOtherfmpScale <- make_color_scale(otherfmp_names_wrapped, scale_name = paletteName2, maxUniqueColors = maxUniqueColors, wrap_names = TRUE)
-
-# original color scale based on revenue quanities
-quantOtherScale <-  scale_fill_viridis(discrete=TRUE) +
-
-# allColors <- append(topfmpColors, otherfmpColors)
-# 
-# if (length(unique(names(allColors))) != length(unique(unname(allColors))) ) {
-#   warning("Some FMPs have multiple colors and will display as blank in plots")
-# }
-
-###########################################
-#### Set plot colors for other fmps end ###
-###########################################
-
-# get names of all other fmp names other than top FMPs
-otherfmpnames <- unique(fmp_merge$FMP) %notin% top_five_fmp_names
-
-# get vector of all zones except "Other"
-# allZones <- unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ]
-
-# ### get only data for Hudson_North
-# broadzone = "Fairways North"
-# broadzone = "Fairways_South"
-# broadzone = "Hudson_North"
-# broadzone = "Hudson_South"
-# replace underscores with space and capitalize each word (for plot title automation)
-# broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE)
-
-# filter fmp_merge table by other fmp names create above and fix text
-otherFMP_table <- fmp_merge %>% 
-  filter(FMP %in% otherfmpnames)
-  # filter(FMP %in% otherfmpnames) %>% 
-  # mutate(FMP = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(FMP), perl=TRUE)) %>% # make FMP names lowercase
-  # mutate(FMP = if_else(FMP=="None","No Federal FMP", FMP))
-# make FMP names lowercase
-# otherFMP_table$FMP <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(otherFMP_table$FMP), perl=TRUE)
-# otherFMP_table$FMP[otherFMP_table$FMP=="None"] <- "No Federal FMP"
-
-# broadzone <- "Fairways South"
-# weirdness fix
-# rm(allZones)
-# allZones <- unique(otherFMP_table$Area)
-
-#### get rev and landing plots and tables for all zones
-for (broadzone in allZones) {
-  # allZones[2]
-  figure_num = figure_num + 1
-  # broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE) # make name pretty
-  # cat("\raggedright")
-  # cat(paste0("*", broadzone, "*", "  ", "\n\n"),"  ") # display name of broadzone on vignette
-  # broadzone_underscore <- broadzone
-  # broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", broadzone), perl=TRUE) # make spaces underscores in area
-  broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", broadzone)), perl=TRUE) # make spaces underscores and backslashs as dashes in area 
-  
-
-# landings study area
-
-  # ### get only data for Hudson_North
-# broadzone = "Fairways_North"
-# broadzone = "Fairways_South"
-# broadzone = "Hudson_North"
-# broadzone = "Hudson_South"
-# replace underscores with space and capitalize each word (for plot title automation)
-# broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE)
-
-
-# order by revenue
-# otherFMP <- left_join(tail(allYearsSum[order(-allYearsSum$InsideREV_total),], 
-#                                nrow(allYearsSum[order(-allYearsSum$InsideREV_total),])-5), revland_area, by='FMP')
-
-# filter by the area
-otherFMP <- otherFMP_table %>% filter(Area == broadzone_underscore)
-
-otherFMP_table_no_breaks <- otherFMP #create other fmp table without line breaks
-
-# change extra long legend names - add a \n to halfway word 
-otherFMP$FMP <- str_wrap(otherFMP$FMP, width=30)
-
-# remove NA columns from dataset
-otherFMP <- otherFMP %>% filter(!is.na(Year))
-
-# change order of bar column stack
-otherFMP$FMP <- reorder(otherFMP$FMP, otherFMP$yfa_land)
-otherFMP$FMP <- factor(otherFMP$FMP, levels=levels(otherFMP$FMP))
-
-# cat("\centering")
-cat("Figure ", section_num,".", figure_num, " Landings from Other Impacted FMPs, ", broadzone, "  \n\n", sep = "")
-
-# plot
-# lp <- ggplot(otherFMP, aes(x = Year, y = yfa_land/1000000, fill = str_wrap(FMP, width = 30))) +
-lp <- ggplot(otherFMP, aes(x = Year, y = yfa_land/1000000, fill = FMP)) +
-  guides(fill=guide_legend(title=NULL, reverse = TRUE)) +
-  geom_col(width=0.4) +
-  xlab(NULL) +
-  ylab("Millions of Pounds") +
-  # scale_y_continuous() +
-  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) + 
-  theme_bw() +
-  # theme_ipsum() +
-  coord_flip() +
-  ggtitle(paste0(" Landings from Other Impacted FMPs, ", broadzone)) +
-  # theme(text=element_text( size=10),
-  #       panel.grid.major = element_line(colour="gray", size=0.5),
-  #       # plot.title = element_text(hjust = 0.5, size=18))
-  #       plot.title = element_text())
-  # theme(text=element_text(size=10, family="serif"),
-  theme(text=element_text(size=10),  
-        panel.grid.major = element_line(colour="gray", size=0.5),
-        # plot.title = element_text(hjust = 0.5, size=18))
-        plot.title = element_text())
-        # panel.border = element_rect(colour = "black", size=0))
-# lp
-
-# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
-if (assignedColors) {
-  lp <- lp + uniqueOtherfmpScale
-} else {
-  lp <- lp + quantOtherScale
-}
-
-# dispay plot
-print(lp)
-
-# save to file
-ggsave(paste0(output_fotherfmp,"/OtherFMPLand_",substr(broadzone_underscore,0,30),".png"), plot = lp)
-# save to file - base functions
-# png(paste0(output_fotherfmp,"/Top5FMPLand_",broadzone,".png")
-# print(lp)
-# dev.off()
-rm(lp)
-# alternatively, save plot as png and call
-# knitr::include_graphics("rrtools-steps-carbon.png")
-
-# sort by landings
-allyrland_table <- otherFMP_table_no_breaks %>%  
-  distinct(FMP, allyrtotal_rev, allyrtotal_land) %>%
-  arrange(desc(allyrtotal_land)) %>%
-  # arrange(desc(allyearland_total)) %>%
-  dplyr::select(FMP, allyrtotal_land) %>% 
-  dplyr::rename("All Year Total" = allyrtotal_land) %>% 
-  ungroup()
-  
-# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
-# TODO: add number to word function
-
-allyrland_table <- as_tibble(allyrland_table)
-# convert fmp back to charaters - add totals row - format Landings column w/ $, commas, and rounded for estimation - *non-pipe way
-allyrland_table$FMP <- as.character(allyrland_table$FMP)
-allyrland_table <- rbind(allyrland_table, c("**Total**", colSums(allyrland_table[,2])))
-# allyrland_table$`All Year Total` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyrland_table$`All Year Total`))
-allyrland_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE))) < 500,"<500", comma_format(trim = TRUE, accuracy = 1000)(as.numeric(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-allyrland_table[nrow(allyrland_table),2] <- paste0("**",allyrland_table[nrow(allyrland_table),2],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-# names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- paste0(numyear, " Year Total")
-names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- paste0(numyear, " Year Landings")
-
-cat("\n\n")
-
-print(kable(allyrland_table, caption = paste0(numyear,' Year Total Landings (Pounds), Other Impacted FMP, ', broadzone), align=c('l', 'r')))
-  
-cat("\n\n\n\n\n\n")
-
-#######################################################################################
-# revenue study area
-figure_num = figure_num + 1
-
-rm(otherFMP)
-
-# otherFMP <- left_join(tail(allYearsSum[order(-allYearsSum$InsideLANDED_total),], 
-#                                nrow(allYearsSum[order(-allYearsSum$InsideLANDED_total),])-5), revland_area, by='FMP')
-
-otherFMP <- otherFMP_table %>% filter(Area == broadzone_underscore)
-
-otherFMP_table_no_breaks <- otherFMP #create other fmp table without line breaks
-
-# change extra long legend names - add a \n to halfway word 
-otherFMP$FMP <- str_wrap(otherFMP$FMP, width=30)
-
-# remove NA columns from dataset
-otherFMP <- otherFMP %>% filter(!is.na(Year))
-
-# make FMP names lowercase
-# otherFMP$FMP <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(otherFMP$FMP), perl=TRUE)
-# otherFMP$FMP[otherFMP$FMP=="None"] <- "No Federal FMP"
-
-# change order of bar column stack
-otherFMP$FMP <- reorder(otherFMP$FMP, otherFMP$yfa_rev)
-otherFMP$FMP <- factor(otherFMP$FMP, levels=levels(otherFMP$FMP))
-
-cat("Figure ", section_num,".", figure_num, " Revenue from Other Impacted FMPs, ", broadzone, "  \n\n", sep = "")
-
-# plot
-# rp <- ggplot(otherFMP, aes(x = Year, y = yfa_rev/1000000, fill = str_wrap(FMP, width = 30))) +
-rp <- ggplot(otherFMP, aes(x = Year, y = yfa_rev/1000000, fill = FMP)) +
-  guides(fill=guide_legend(title=NULL, reverse = TRUE)) +
-  geom_col(width=0.4) +
-  xlab(NULL) +
-  ylab("Revenue in Millions") +
-  # scale_y_continuous(labels = dollar_format(prefix="$")) +
-  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
-  theme_bw() +
-  # theme_ipsum() +
-  coord_flip() +
-  ggtitle(paste0("Revenue from Other Impacted FMPs, ", broadzone)) +
-  # theme(text=element_text(size=10, family="serif"),
-  theme(text=element_text(size=10),
-        panel.grid.major = element_line(colour="gray", size=0.5),
-        # plot.title = element_text(hjust = 0.5, size=18))
-        plot.title = element_text())
-  
-# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
-if (assignedColors) {
-  rp <- rp + uniqueOtherfmpScale
-} else { 
-  rp <- rp + quantOtherScale
-}
-# dispay plot
-print(rp)
-# save to file
-ggsave(paste0(output_fotherfmp, "/OtherFMPRev_", substr(broadzone_underscore,0,30),".png"), plot = rp)
-# save to file - base functions
-# png(paste0(output_fotherfmp,"/Top5FMPRev_",broadzone,".png"))
-# print(rp)
-# dev.off()
-rm(rp)
-# alternatively, save plot as png and call
-# knitr::include_graphics("rrtools-steps-carbon.png")
-
-# names(otherFMP)
-# create 5 year (all years) table
-allyrrev_table <- otherFMP_table_no_breaks %>% distinct(FMP, allyrtotal_rev) %>%
-  arrange(desc(allyrtotal_rev)) %>%
-  dplyr::rename("All Year Revenue" = allyrtotal_rev) %>% 
-  ungroup()
-
-# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
-
-allyrrev_table <- as_tibble(allyrrev_table)
-
-# convert fmp back to charaters - add totals row - format revenue column w/ $, commas, and rounded for estimation - *non-pipe way
-allyrrev_table$FMP <- as.character(allyrrev_table$FMP)
-allyrrev_table <- rbind(allyrrev_table, c("**Total**", colSums(allyrrev_table[,2])))
-# allyrrev_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyrrev_table$`All Year Revenue`))
-allyrrev_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE))) < 500,"<$500", comma_format(trim = TRUE, accuracy = 1000, prefix="$")(as.numeric(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-allyrrev_table[nrow(allyrrev_table),2] <- paste0("**",allyrrev_table[nrow(allyrrev_table),2],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrrev_table)[names(allyrrev_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
-
-cat("\n\n")
-
-print(kable(allyrrev_table, caption = paste0(numyear, ' Year Total Revenue for Other Impacted FMPs, ',broadzone), align=c('l', 'r')))
-
-cat("\n\n\n\n")
-
-}
-
-##########################################################################
-# rm(allZones)
-# allZones <- unique(otherFMP_table$Area)
-# allZones <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", allZones), perl=TRUE)
-
-```
-
-```{r other_fmp_summary, results='asis', eval = other_fmp_section_summary} 
-
-section_name = "Other Impacted FMPs"
-section_table <- get("otherFMP_table") %>% ungroup()
-margin <- "FMP"
-
-cat("<br>") 
-
-cat("*Summary*")
-
-if (single_area_summaries) {
-  all_rev <- allyrrev_table %>% filter(.data[[margin]] == '**Total**') %>% select(-.data[[margin]])
-  all_land <- allyrland_table %>% filter(.data[[margin]] =="**Total**") %>% select(-.data[[margin]])
-  rev_land_total <- cbind(all_rev, all_land)
-  row.names(rev_land_total) <- "**Total**"
-  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', section_name, ' '), align=c('r', 'r')))
-} else {
-  counter = 1
-  for (ar in allZones) {
-    if (counter == 1) {
-      ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-    allyr_table <- as_tibble(section_table %>%  
-      select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%     # use .data[[margin]] to refer to column name stored as string
-      filter(Area == ar_u) %>% 
-      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
-      arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
-      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate("{margin}" := as.character(.data[[margin]])) %>% # use '"{margin}" :=' to refer to a column as a string
-      ungroup()) # have to convert to tibble to add up rows
-    allyr_table <- rbind(allyr_table, c("**Total**", ar, colSums(allyr_table[,3]), colSums(allyr_table[,4])))
-    allyr_table <- allyr_table %>% filter(.data[[margin]] =="**Total**")
-    counter = 2
-  } else {
-    ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-    allyr_table_2 <- as_tibble(section_table %>%  
-      filter(Area == ar_u) %>% 
-      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
-      arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
-      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate("{margin}" := as.character(.data[[margin]])) %>% 
-      ungroup())
-    
-    allyr_table_2 <- rbind(allyr_table_2, c("**Total**", ar, colSums(allyr_table_2[,3]), colSums(allyr_table_2[,4])))
-    allyr_table_2 <- allyr_table_2 %>% filter(.data[[margin]] =="**Total**")
-    allyr_table <- rbind(allyr_table, allyr_table_2)
-    }
-  }
-
-  allyr_table <- allyr_table %>% select(-.data[[margin]]) %>% mutate(`All Year Revenue` = round(as.double(`All Year Revenue`), digits = -3)) %>% mutate(`All Year Landings (Pounds)` = round(as.double(`All Year Landings (Pounds)`), digits = -3))
-  allyr_table <- rbind(allyr_table, c('**Total**', colSums(allyr_table[,2]), colSums(allyr_table[,3])))
-  
-  # Format columns
-  allyr_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyr_table$`All Year Revenue`))
-  allyr_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyr_table$`All Year Landings (Pounds)`))
-  
-  # Make bottom rows bold
-  allyr_table[nrow(allyr_table),2] <- paste0("**", allyr_table[nrow(allyr_table),2],"**")
-  allyr_table[nrow(allyr_table),3] <- paste0("**", allyr_table[nrow(allyr_table),3],"**")
-  
-  # set dynamic varible names (cant use paste0 in rename in tidyverse)
-  names(allyr_table)[names(allyr_table) == "Area"] <- paste0(proper(area_adjective), "Area")
-  names(allyr_table)[names(allyr_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
-  names(allyr_table)[names(allyr_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
-  
-  print(kable(allyr_table, caption = paste0(section_name, ' ', numyear,' Year Revenue and Landings '), align=c('l', 'r', 'r')))  
-  
-  }
-
-
-
-```
-
-
-```{r top_species_dynamic_text, results='asis', eval = top_species_section} 
-
-#############################
-###### Set Top Species ######
-#############################
-
-pii_all_yr_area_top_species <- subset(REVENUEFILE, !is.na(SPPNM)) %>% 
-  # dplyr::select(SPPNM, InsideREV, InsideLANDED, PERMIT, Area ) %>% 
-  dplyr::select(SPPNM, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM) %>% 
-  filter(Area != "Other") %>% 
-  group_by(SPPNM) %>% 
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF =  npermits < 3) %>%
-  # mutate(CONF2 =  ndealers < 3) %>%
-  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
-  mutate(SPPNM_CONF = ifelse(CONF == T, 'All Others', SPPNM)) %>%
-  ungroup() %>%
-  group_by(SPPNM_CONF) %>%
-  dplyr::summarize(
-    yfa_rev = sum(InsideREV, na.rm = T),
-    yfa_land = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T),
-    ndealers = sum(ndealers, na.rm = T)
-    ) %>% 
-  dplyr::rename("Species"= SPPNM_CONF) %>% 
-  arrange(desc(yfa_rev)) %>% 
-  top_n(n=number_of_top_species, wt=yfa_rev) %>% 
-  pull(Species)
-  
-top_species_names <- str_to_title(pii_all_yr_area_top_species)
-top_species_names <- paste0(paste0(top_species_names %notin% tail(top_species_names, n=1), collapse = ", ") , " and ", tail(top_species_names, n=1))
-
-```
-
-```{r top_species, results='asis', eval = top_species_section} 
-
-cat("<br> \n\n") 
-
-cat("### Most Impacted Species \n")
-
-cat("We analyzed the top ", number_of_top_species, " species due to their economic importance in the area and to isolate them from combined FMPs. The top ", number_of_top_species," species by revenue are: ", top_species_names,". The category \"All Others\" refers to species with less than three permits or dealers impacted to protect data confidentiality.", " ", rounded_message, "\n\n\n ") 
-
-cat("<br> ")
-
-##########################################################################
-# testing
-# save_files = "n" #dont save files as csv or rdata
-# save_files = "c"
-
-# create new folder for section
-dir.create(file.path(output_f, "topspecies"), showWarnings = FALSE)
-output_ftopspecies = file.path(output_f, "topspecies")
-
-# For figure numbering
-section_num = section_num + 1 
-figure_num = 0
-
-#############################
-###### Set Top Species ######
-#############################
-
-pii_all_yr_area_top_species <- subset(REVENUEFILE, !is.na(SPPNM)) %>%
-  dplyr::select(SPPNM, Area, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>%
-  filter(Area != "Other") %>%
-  group_by(SPPNM, Year, Area) %>%
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF =  npermits < 3) %>%
-  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
-  mutate(SPPNM_CONF = ifelse(CONF == T, 'All Others', SPPNM)) %>%
-  ungroup() %>%
-  group_by(Year, SPPNM_CONF, Area) %>% 
-  dplyr::summarize(
-    yfa_rev = sum(InsideREV, na.rm = T),
-    yfa_land = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T),
-    ndealers = sum(ndealers, na.rm = T)
-    ) %>% 
-  dplyr::rename("Species"= SPPNM_CONF) %>% 
-  dplyr::select(Species, Year, Area, yfa_rev, yfa_land) %>% 
-  group_by(Species, Area) %>% 
-  dplyr::summarize(
-    allyrtotal_rev = sum(yfa_rev, na.rm = T),
-    allyrtotal_land = sum(yfa_land, na.rm = T)) %>% 
-  arrange(desc(allyrtotal_rev)) %>% 
-  ungroup() %>% 
-  top_n(n=number_of_top_species, wt=allyrtotal_rev) %>% 
-  pull(Species)
-  
-#################################
-###### Set Top Species end ######
-#################################
-
-#############################################################
-#### Create Dataframe of Select Species with PII Removed ####
-#############################################################
-
-# PII fixed for all areas
-piispecies <- subset(REVENUEFILE, !is.na(SPPNM)) %>%
-  dplyr::select(SPPNM, Area, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>%
-  filter(Area != "Other") %>% 
-  # filter(SPPNM %in% selectSpecies) %>%
-  filter(SPPNM %in% pii_all_yr_area_top_species) %>%
-  group_by(SPPNM, Year, Area) %>%
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF =  npermits < 3) %>%
-  # mutate(CONF2 =  ndealers < 3) %>%
-  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
-  mutate(SPPNM_CONF = ifelse(CONF == T, 'All Others', SPPNM)) %>%
-  ungroup() %>%
-  # dplyr::select(-starts_with("SPPNM")) %>%
-  # dplyr::select(Year, InsideREV, InsideLANDED, npermits, SPPNM_CONF) %>%
-  group_by(SPPNM_CONF, Year, Area) %>%
-  dplyr::summarize(
-    yfa_rev = sum(InsideREV, na.rm = T),
-    yfa_land = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T),
-    ndealers = sum(ndealers, na.rm = T)) %>% 
-  dplyr::rename("Species"= SPPNM_CONF)
-
-speciesallyr_total <- piispecies %>% dplyr::select(Species, Year, Area, yfa_rev, yfa_land) %>% 
-  group_by(Species, Area) %>% 
-  dplyr::summarize(
-    allyrtotal_rev = sum(yfa_rev, na.rm = T),
-    allyrtotal_land = sum(yfa_land, na.rm = T)
-  )
-
-# species_merge <- merge(piispecies, speciesallyr_total, by = c("Species", "Area"))
-# keep as tibble - use dplyr functions insead of base
-species_merge <- left_join(piispecies, speciesallyr_total, by = c("Species", "Area"))
-
-# Fix error with monkfish FMP by subtracting 227014.9999 from revenue
-# PIISPPNMAllYears[which(PIISPPNMAllYears$FMP == 'MONKFISH JOINT'),"InsideREV_total"] <- PIISPPNMAllYears[which(PIISPPNMAllYears$FMP=='MONKFISH JOINT'),"InsideREV_total"]-227014.9999
-
-#################################################################
-#### Create Dataframe of Select Species with PII Removed end ####
-#################################################################
-
-############################################
-#### Set plot colors for select species ####
-############################################
-# create custom color palette for all other unique FMPs 
-# (length(unique(species_merge$FMP))-5)
-selectSpeciesbyArea <- species_merge %>% 
-  group_by(Species, Area) %>%
-  dplyr::summarize(
-    REV = sum(yfa_rev, na.rm = T)
-    ) %>% 
-  ungroup %>% 
-  group_by(Area) %>% 
-  # top_n(., n=((length(unique(species_merge$Species))-5)*-1), wt=REV) %>% 
-  arrange(Area, desc(REV)) %>% 
-  ungroup %>% 
-  mutate(Species = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(Species), perl=TRUE))
-
-# count of number of unique Species between each area
-uniqueTopSpeciesScale <- make_color_scale(selectSpeciesbyArea$Species, maxUniqueColors = maxUniqueColors)
-
-# original color scale based on revenue quanities
-quantSpeciesScale <- scale_fill_brewer(name = NULL, palette = "RdYlBu",
-                                     direction = -1, guide = guide_legend(reverse = TRUE))
-
-# rm(NumUniqueMargins, UniqueMargins) # garbage collection
-
-################################################
-#### Set plot colors for select species end ####
-################################################
-
-# Replace 'None' with pretty wording 
-# REVENUEFILE$FMP[REVENUEFILE$FMP=="None"] <- "No Federal FMP"
-
-# get vector of all zones except "Other"
-# allZones <- unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ]
-
-# ### get only data for Hudson_North
-# broadzone = "Fairways North"
-# broadzone = "Fairways_South"
-# broadzone = "Hudson_North"
-# broadzone = "Hudson_South"
-# replace underscores with space and capitalize each word (for plot title automation)
-# broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE)
-
-
-#### get rev and landing plots and tables for all zones
-for (broadzone in allZones) {
-  figure_num = figure_num + 1
-  # broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE) # make name pretty
-  # cat("\raggedright")
-  # cat(paste0("*", broadzone, "*", "  ", "\n\n"),"  ") # display name of broadzone on vignette
-  # broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", broadzone), perl=TRUE) # make spaces underscores in area
-  broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", broadzone)), perl=TRUE) # make spaces underscores and backslashs as dashes in area
-
-###################################################################
-# landings plot and table
-
-# filter by area
-sSpeciesArea <- species_merge %>% filter(Area == broadzone_underscore)
-
-# make Species names lowercase
-sSpeciesArea$Species <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(sSpeciesArea$Species), perl=TRUE)
-# sSpeciesArea$Species[sSpeciesArea$Species=="None"] <- "No Federal FMP"
-
-# change order of stack
-sSpeciesArea$Species <- reorder(sSpeciesArea$Species, sSpeciesArea$yfa_land)
-sSpeciesArea$Species <- factor(sSpeciesArea$Species, levels=levels(sSpeciesArea$Species))
-
-# sSpeciesArea$Species <- reorder(sSpeciesArea$Species, sSpeciesArea$sum_rev)
-# sSpeciesArea$Species <- factor(sSpeciesArea$Species, levels=levels(sSpeciesArea$Species))
-
-# cat("\centering")
-cat("Figure ", section_num,".", figure_num, " Landings of Top Species, ", broadzone, "  \n\n", sep = "")
-
-# plot
-lp <- ggplot(sSpeciesArea, aes(x = Year, y = yfa_land/1000000, fill=Species)) +
-  geom_col(width=0.4) +
-  xlab(NULL) +
-  ylab("Millions of Pounds") +
-  # scale_y_continuous() +
-  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) + 
-  theme_bw() +
-  # theme_ipsum() +
-  coord_flip() +
-  ggtitle(paste0(" Landings of Top Species, ",broadzone)) +
-  # theme(text=element_text(size=10, family="serif"),
-  theme(text=element_text(size=10),
-        panel.grid.major = element_line(colour="gray", size=0.5),
-        # plot.title = element_text(hjust = 0.5, size=18))
-        plot.title = element_text())
-
-# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
-if (assignedColors) {
-  lp <- lp + uniqueTopSpeciesScale
-} else {
-  lp <- lp + quantSpeciesScale
-}
-# dispay plot
-print(lp)
-
-# save to file
-ggsave(paste0(output_ftopspecies,"/TopSpeciesLand_", substr(broadzone_underscore,0,30),".png"), plot = lp)
-# save to file - base functions
-# png(paste0(output_fselectspecies,"/SpeciesLand_",broadzone,".png"))
-# print(lp)
-# dev.off()
-rm(lp)
-# alternatively, save plot as png and call
-# knitr::include_graphics("rrtools-steps-carbon.png")
-
-# sort by landings
-allyrland_table <- subset(sSpeciesArea, select = -Year ) %>%  
-  # select(Species, allyrtotal_rev, allyrtotal_land) %>% 
-  distinct(Species, allyrtotal_rev, allyrtotal_land) %>%
-  arrange(desc(allyrtotal_land)) %>%
-  # arrange(desc(allyearland_total)) %>%
-  dplyr::select(Species, allyrtotal_land) %>% 
-  dplyr::rename("All Year Total" = allyrtotal_land) %>% 
-  ungroup()
-  
-# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
-# TODO: add number to word function
-
-# convert fmp back to charaters - add totals row - format Landings column w/ $, commas, and rounded for estimation - *non-pipe way
-allyrland_table$Species <- as.character(allyrland_table$Species)
-allyrland_table <- rbind(allyrland_table, c("**Total**", colSums(allyrland_table[,2]))) # allyrland_table must be a tibble and without year column for this to work
-# allyrland_table$`All Year Total` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyrland_table$`All Year Total`))
-allyrland_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE))) < 500,"<500", comma_format(trim = TRUE, accuracy = 1000)(as.numeric(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-allyrland_table[nrow(allyrland_table),2] <- paste0("**",allyrland_table[nrow(allyrland_table),2],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- paste0(numyear, " Year Landings")
-
-cat("\n\n")
-
-print(kable(allyrland_table, caption = paste0(numyear,' Year Total Landings (Pounds), Most Impacted Species, ',broadzone), align=c('l', 'r')))
-  
-cat("\n\n\n\n\n\n")
-  
-###################################################################
-# revenue plot and table
-figure_num = figure_num + 1
-
-rm(sSpeciesArea)
-
-sSpeciesArea <- species_merge %>% filter(Area == broadzone_underscore)
-
-# make FMP names lowercase
-sSpeciesArea$Species <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(sSpeciesArea$Species), perl=TRUE)
-# sSpeciesArea$Species[sSpeciesArea$Species=="None"] <- "No Federal FMP"
-
-# change order of stack
-sSpeciesArea$Species <- reorder(sSpeciesArea$Species, sSpeciesArea$yfa_rev)
-sSpeciesArea$Species <- factor(sSpeciesArea$Species, levels=levels(sSpeciesArea$Species))
-
-cat("Figure ", section_num,".", figure_num, " Revenue from Most Impacted Species, ", broadzone, "  \n\n", sep = "")
-
-# plot
-rp <- ggplot(sSpeciesArea, aes(x = Year, y = yfa_rev/1000000, fill=Species)) +
-  geom_col(width=0.4) +
-  xlab(NULL) +
-  ylab("Revenue in Millions") +
-  # scale_y_continuous(labels = dollar_format(prefix="$")) +
-  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
-  theme_bw() +
-  # theme_ipsum() +
-  coord_flip() +
-  ggtitle(paste0("Revenue from Most Impacted Species, ", broadzone)) +
-  # theme(text=element_text(size=10, family="serif"),
-  theme(text=element_text(size=10),
-        panel.grid.major = element_line(colour="gray", size=0.5),
-        # plot.title = element_text(hjust = 0.5, size=18))
-        plot.title = element_text())
-
-# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
-if (assignedColors) {
-  rp <- rp + uniqueTopSpeciesScale
-} else {
-  rp <- rp + quantSpeciesScale
-}
-# dispay plot
-print(rp)
-# save to file
-ggsave(paste0(output_ftopspecies, "/TopSpeciesRev_", substr(broadzone_underscore,0,30),".png"), plot = rp)
-# save to file - base functions
-# png(paste0(output_ftopspecies,"/OtherSpeciesRev_",broadzone,".png"))
-# print(rp)
-# dev.off()
-rm(rp)
-# alternatively, save plot as png and call
-# knitr::include_graphics("rrtools-steps-carbon.png")
-
-##########################################################################
-
-# sort by revenue
-allyrrev_table <- subset(sSpeciesArea, select = -Year ) %>%  
-  # select(Species, allyrtotal_rev, allyrtotal_land) %>% 
-  distinct(Species, allyrtotal_rev) %>%
-  arrange(desc(allyrtotal_rev)) %>%
-  # arrange(desc(allyearland_total)) %>%
-  dplyr::select(Species, allyrtotal_rev) %>% 
-  dplyr::rename("All Year Total" = allyrtotal_rev) %>% 
-  ungroup()
-  
-# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
-# TODO: add number to word function
-
-# convert fmp back to charaters - add totals row - format Landings column w/ $, commas, and rounded for estimation - *non-pipe way
-allyrrev_table$Species <- as.character(allyrrev_table$Species)
-allyrrev_table <- rbind(allyrrev_table, c("**Total**", colSums(allyrrev_table[,2]))) # allyrrev_table must be a tibble and without year column for this to work
-allyrrev_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE))) < 500,"<$500", comma_format(trim = TRUE, accuracy = 1000, prefix="$")(as.numeric(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-allyrrev_table[nrow(allyrrev_table),2] <- paste0("**",allyrrev_table[nrow(allyrrev_table),2],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrrev_table)[names(allyrrev_table) == "All Year Total"] <- paste0(numyear, " Year Revenue")
-
-cat("\n\n")
-
-print(kable(allyrrev_table, caption = paste0(numyear, ' Year Total Revenue, Most Impacted Species, ', broadzone), align=c('l', 'r')))
-  
-cat("\n\n\n\n\n\n")
-
-}
-
-
-```
-
-```{r top_species_summary, results='asis', eval = top_species_section_summary} 
-
-section_name = "Most Impacted Species"
-section_table <- get("species_merge") %>% ungroup()
-margin <- "Species"
-
-cat("<br>") 
-
-cat("*Summary*")
-
-if (single_area_summaries) {
-  all_rev <- allyrrev_table %>% filter(.data[[margin]] == '**Total**') %>% select(-.data[[margin]])
-  all_land <- allyrland_table %>% filter(.data[[margin]] =="**Total**") %>% select(-.data[[margin]])
-  rev_land_total <- cbind(all_rev, all_land)
-  row.names(rev_land_total) <- "**Total**"
-  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', section_name, ' '), align=c('r', 'r')))
-} else {
-  counter = 1
-  for (ar in allZones) {
-    if (counter == 1) {
-      ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-    allyr_table <- as_tibble(section_table %>%  
-      select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%     # use .data[[margin]] to refer to column name stored as string
-      filter(Area == ar_u) %>% 
-      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
-      arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
-      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate("{margin}" := as.character(.data[[margin]])) %>% # use '"{margin}" :=' to refer to a column as a string
-      ungroup()) # have to convert to tibble to add up rows
-    allyr_table <- rbind(allyr_table, c("**Total**", ar, colSums(allyr_table[,3]), colSums(allyr_table[,4])))
-    allyr_table <- allyr_table %>% filter(.data[[margin]] =="**Total**")
-    counter = 2
-  } else {
-    ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-    allyr_table_2 <- as_tibble(section_table %>%  
-      filter(Area == ar_u) %>% 
-      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
-      arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
-      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate("{margin}" := as.character(.data[[margin]])) %>% 
-      ungroup())
-    
-    allyr_table_2 <- rbind(allyr_table_2, c("**Total**", ar, colSums(allyr_table_2[,3]), colSums(allyr_table_2[,4])))
-    allyr_table_2 <- allyr_table_2 %>% filter(.data[[margin]] =="**Total**")
-    allyr_table <- rbind(allyr_table, allyr_table_2)
-    }
-  }
-
-  allyr_table <- allyr_table %>% select(-.data[[margin]]) %>% mutate(`All Year Revenue` = round(as.double(`All Year Revenue`), digits = -3)) %>% mutate(`All Year Landings (Pounds)` = round(as.double(`All Year Landings (Pounds)`), digits = -3))
-  allyr_table <- rbind(allyr_table, c('**Total**', colSums(allyr_table[,2]), colSums(allyr_table[,3])))
-  
-  # Format columns
-  allyr_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyr_table$`All Year Revenue`))
-  allyr_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyr_table$`All Year Landings (Pounds)`))
-  
-  # Make bottom rows bold
-  allyr_table[nrow(allyr_table),2] <- paste0("**", allyr_table[nrow(allyr_table),2],"**")
-  allyr_table[nrow(allyr_table),3] <- paste0("**", allyr_table[nrow(allyr_table),3],"**")
-  
-  # set dynamic varible names (cant use paste0 in rename in tidyverse)
-  names(allyr_table)[names(allyr_table) == "Area"] <- paste0(proper(area_adjective), "Area")
-  names(allyr_table)[names(allyr_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
-  names(allyr_table)[names(allyr_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
-  
-  print(kable(allyr_table, caption = paste0(section_name, ' ', numyear,' Year Revenue and Landings '), align=c('l', 'r', 'r')))  
-  
-  }
-
-
-```
-
-
-```{r select_species_dynamic_text, results='asis', eval = select_species_section} 
-
-################################
-###### Set Select Species ######
-################################
-
-select_species_names <- str_to_title(selectSpecies)
-select_species_names <- paste0(paste0(select_species_names %notin% tail(select_species_names, n=1), collapse = ", ") , " and ", tail(select_species_names, n=1))
-
-```
-
-```{r select_species, results='asis', eval = select_species_section} 
-cat("<br> \n\n")
-
-cat("### Select Species \n") 
-
-cat("We analyzed select species due to their economic importance in the area and to isolate them from combined FMPs. The select species are: ", select_species_names,". The category \"All Others\" refers to species with less than three permits or dealers impacted to protect data confidentiality. ", " ", rounded_message, "\n\n\n") 
-
-cat("<br>")
-
-########################################################################## 
-# testing
-# save_files = "n" #dont save files as csv or rdata
-# save_files = "c"
-
-# create new folder for section
-dir.create(file.path(output_f, "selectspecies"), showWarnings = FALSE)
-output_fselectspecies = file.path(output_f, "selectspecies")
-
-# For figure numbering
-section_num = section_num + 1 
-figure_num = 0
- 
-############################
-#### Set Select Species ####
-############################
-# Select Species plot
-# Select Species: Black Sea Bass, Butterfish, Lobster, Atlantic Mackerel, Ocean Quahog, Scup, Squids, and Summer Flounder. 
-# data equivelent:
-# tolower(sort(unique(REVENUEFILE$SPPNM)))
-# gsub(',','" "',"Black Sea Bass, Butterfish, Lobster, Atlantic Mackerel, Ocean Quahog, Scup, Squids, and Summer Flounder")
-# c("Black Sea Bass", "Butterfish", "Lobster", "Atlantic Mackerel", "Ocean Quahog", "Scup", "Squids", "Summer Flounder")
-# all species in rev file
-# sort(unique(REVENUEFILE$SPPNM))
-
-# selectSpecies <- c("SEA BASS, BLACK", "BUTTERFISH", "LOBSTER" , "MACKEREL, ATLANTIC", "OCEAN QUAHOG", 
-#                    "SCUP", "SQUID (ILLEX)", "FLOUNDER, SUMMER", "INSHORE LONGFIN SQUID")
-
-# sort(unique(REVENUEFILE$SPPNM))[sort(unique(REVENUEFILE$SPPNM)) %in% selectSpecies] # quick check for accuracy
-# species_list <- sort(unique(SPECIES$SPPNM))
-################################
-#### Set Select Species end ####
-################################
-
-#############################################################
-#### Create Dataframe of Select Species with PII Removed ####
-#############################################################
-
-# PII fixed for all areas
-piispecies <- subset(REVENUEFILE, !is.na(SPPNM)) %>%
-  # dplyr::select(SPPNM, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
-  dplyr::select(SPPNM, Year, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM) %>% # for dealers
-  filter(Area != "Other") %>% 
-  filter(SPPNM %in% selectSpecies) %>%
-  group_by(SPPNM, Year, Area) %>%
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF =  npermits < 3) %>%
-  # mutate(CONF2 =  ndealers < 3) %>%
-  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
-  mutate(SPPNM_CONF = ifelse(CONF == T, 'All Others', SPPNM)) %>%
-  ungroup() %>%
-  # dplyr::select(-starts_with("SPPNM")) %>%
-  # dplyr::select(Year, InsideREV, InsideLANDED, npermits, SPPNM_CONF) %>%
-  group_by(SPPNM_CONF, Year, Area) %>%
-  dplyr::summarize(
-    yfa_rev = sum(InsideREV, na.rm = T),
-    yfa_land = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T),
-    ndealers = sum(ndealers, na.rm = T)
-    ) %>% 
-  dplyr::rename("Species"= SPPNM_CONF)
-
-speciesallyr_total <- piispecies %>% dplyr::select(Species, Year, Area, yfa_rev, yfa_land) %>% 
-  group_by(Species, Area) %>% 
-  dplyr::summarize(
-    allyrtotal_rev = sum(yfa_rev, na.rm = T),
-    allyrtotal_land = sum(yfa_land, na.rm = T)
-  )
-
-# species_merge <- merge(piispecies, speciesallyr_total, by = c("Species", "Area"))
-# keep as tibble - use dplyr functions insead of base
-species_merge <- left_join(piispecies, speciesallyr_total, by = c("Species", "Area"))
-
-# Fix error with monkfish FMP by subtracting 227014.9999 from revenue
-# PIISPPNMAllYears[which(PIISPPNMAllYears$FMP == 'MONKFISH JOINT'),"InsideREV_total"] <- PIISPPNMAllYears[which(PIISPPNMAllYears$FMP=='MONKFISH JOINT'),"InsideREV_total"]-227014.9999
-
-#################################################################
-#### Create Dataframe of Select Species with PII Removed end ####
-#################################################################
-
-############################################
-#### Set plot colors for select species ####
-############################################
-# create custom color palette for all other unique FMPs 
-# (length(unique(species_merge$FMP))-5)
-selectSpeciesbyArea <- species_merge %>% group_by(Species, Area) %>%
-  dplyr::summarize(
-    REV = sum(yfa_rev, na.rm = T)
-    ) %>% 
-  ungroup %>% 
-  group_by(Area) %>% 
-  # top_n(., n=((length(unique(species_merge$Species))-5)*-1), wt=REV) %>% 
-  arrange(Area, desc(REV)) %>% 
-  ungroup %>% 
-  mutate(Species = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(Species), perl=TRUE))
-
-# count of number of unique Species between each area
-# selectSpeciesbyArea <- within(selectSpeciesbyArea, { count <- ave(Area, Species, FUN=function(x) length(unique(x)))})
-# pull(selectSpeciesbyArea[selectSpeciesbyArea$count==1,"Species"]) # get vector of Species not shared by all areas
-
-
-
-# NumUniqueMargins <- length(unique(selectSpeciesbyArea$Species))
-# 
-# UniqueMargins <- unique(selectSpeciesbyArea$Species)
-# 
-# # make extra colors if more unique Speciess than maximum colors for palette
-# if (NumUniqueMargins > maxUniqueColors) {
-#   getPalette = colorRampPalette(brewer.pal(maxUniqueColors, paletteName3))
-#   myColors <- getPalette(NumUniqueMargins) 
-# } else {
-#   myColors <- brewer.pal(NumUniqueMargins, paletteName3) # create list of colors using number of unique Speciess from pallettte name
-# }
-# 
-# names(myColors) <- UniqueMargins # name colors for color scale
-# 
-# uniqueSelectSpeciesScale <- scale_fill_manual(name = NULL, values = myColors, guide = guide_legend(reverse = TRUE))
-
-
-uniqueSelectSpeciesScale <- make_color_scale(selectSpeciesbyArea$Species, maxUniqueColors = maxUniqueColors)
-
-# original color scale based on revenue quanities
-quantSpeciesScale <- scale_fill_brewer(name = NULL, palette = "RdYlBu",
-                                     direction = -1, guide = guide_legend(reverse = TRUE))
-
-# rm(NumUniqueMargins, UniqueMargins) # garbage collection
-
-################################################
-#### Set plot colors for select species end ####
-################################################
-
-# Replace 'None' with pretty wording 
-# REVENUEFILE$FMP[REVENUEFILE$FMP=="None"] <- "No Federal FMP"
-
-# get vector of all zones except "Other"
-# allZones <- unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ]
-
-# ### get only data for Hudson_North
-# broadzone = "Fairways North"
-# broadzone = "Fairways_South"
-# broadzone = "Hudson_North"
-# broadzone = "Hudson_South"
-# replace underscores with space and capitalize each word (for plot title automation)
-# broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE)
-
-
-#### get rev and landing plots and tables for all zones
-for (broadzone in allZones) {
-  figure_num = figure_num + 1
-  # broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE) # make name pretty
-  # cat("\raggedright")
-  # cat(paste0("*", broadzone, "*", "  ", "\n\n"),"  ") # display name of broadzone on vignette
-  # broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", broadzone), perl=TRUE) # make spaces underscores in area
-  broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", broadzone)), perl=TRUE) # make spaces underscores and backslashs as dashes in area
-
-###################################################################
-# landings plot and table
-
-# filter by area
-sSpeciesArea <- species_merge %>% filter(Area == broadzone_underscore)
-
-# make Species names lowercase
-sSpeciesArea$Species <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(sSpeciesArea$Species), perl=TRUE)
-# sSpeciesArea$Species[sSpeciesArea$Species=="None"] <- "No Federal FMP"
-
-# change order of stack
-sSpeciesArea$Species <- reorder(sSpeciesArea$Species, sSpeciesArea$yfa_land)
-sSpeciesArea$Species <- factor(sSpeciesArea$Species, levels=levels(sSpeciesArea$Species))
-
-# sSpeciesArea$Species <- reorder(sSpeciesArea$Species, sSpeciesArea$sum_rev)
-# sSpeciesArea$Species <- factor(sSpeciesArea$Species, levels=levels(sSpeciesArea$Species))
-
-# cat("\centering")
-cat("Figure ", section_num,".", figure_num, " Landings of Select Species, ", broadzone, "  \n\n", sep = "")
-
-# plot
-lp <- ggplot(sSpeciesArea, aes(x = Year, y = yfa_land/1000000, fill=Species)) +
-  geom_col(width=0.4) +
-  xlab(NULL) +
-  ylab("Millions of Pounds") +
-  # scale_y_continuous() +
-  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) + 
-  theme_bw() +
-  # theme_ipsum() +
-  coord_flip() +
-  ggtitle(paste0(" Landings of Select Species, ",broadzone)) +
-  # theme(text=element_text(size=10, family="serif"),
-  theme(text=element_text(size=10),
-        panel.grid.major = element_line(colour="gray", size=0.5),
-        # plot.title = element_text(hjust = 0.5, size=18))
-        plot.title = element_text())
-
-# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
-if (assignedColors) {
-  lp <- lp + uniqueSelectSpeciesScale
-} else {
-  lp <- lp + quantSpeciesScale
-}
-# dispay plot
-print(lp)
-
-# save to file
-ggsave(paste0(output_fselectspecies,"/SelectSpeciesLand_",substr(broadzone_underscore,0,30),".png"), plot = lp)
-# save to file - base functions
-# png(paste0(output_fselectspecies,"/SpeciesLand_",broadzone,".png"))
-# print(lp)
-# dev.off()
-rm(lp)
-# alternatively, save plot as png and call
-# knitr::include_graphics("rrtools-steps-carbon.png")
-
-# sort by landings
-allyrland_table <- subset(sSpeciesArea, select = -Year ) %>%  
-  # select(Species, allyrtotal_rev, allyrtotal_land) %>% 
-  distinct(Species, allyrtotal_rev, allyrtotal_land) %>%
-  arrange(desc(allyrtotal_land)) %>%
-  # arrange(desc(allyearland_total)) %>%
-  dplyr::select(Species, allyrtotal_land) %>% 
-  dplyr::rename("All Year Total" = allyrtotal_land) %>% 
-  ungroup()
-  
-# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
-# TODO: add number to word function
-
-# convert fmp back to charaters - add totals row - format Landings column w/ $, commas, and rounded for estimation - *non-pipe way
-allyrland_table$Species <- as.character(allyrland_table$Species)
-allyrland_table <- rbind(allyrland_table, c("**Total**", colSums(allyrland_table[,2]))) # allyrland_table must be a tibble and without year column for this to work
-# allyrland_table$`All Year Total` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyrland_table$`All Year Total`))
-allyrland_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE))) < 500,"<500", comma_format(trim = TRUE, accuracy = 1000)(as.numeric(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-allyrland_table[nrow(allyrland_table),2] <- paste0("**",allyrland_table[nrow(allyrland_table),2],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- paste0(numyear, " Year Total")
-
-cat("\n\n")
-
-print(kable(allyrland_table, caption = paste0(numyear,' Year Total Landings (Pounds), Select Species, ',broadzone), align=c('l', 'r')))
-  
-cat("\n\n\n\n\n\n")
-  
-###################################################################
-# revenue plot and table
-figure_num = figure_num + 1
-
-rm(sSpeciesArea)
-
-sSpeciesArea <- species_merge %>% filter(Area == broadzone_underscore)
-
-# make FMP names lowercase
-sSpeciesArea$Species <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(sSpeciesArea$Species), perl=TRUE)
-# sSpeciesArea$Species[sSpeciesArea$Species=="None"] <- "No Federal FMP"
-
-# change order of stack
-sSpeciesArea$Species <- reorder(sSpeciesArea$Species, sSpeciesArea$yfa_rev)
-sSpeciesArea$Species <- factor(sSpeciesArea$Species, levels=levels(sSpeciesArea$Species))
-
-cat("Figure ", section_num,".", figure_num, " Revenue from Select Species, ", broadzone, "  \n\n", sep = "")
-
-# plot
-rp <- ggplot(sSpeciesArea, aes(x = Year, y = yfa_rev/1000000, fill=Species)) +
-  geom_col(width=0.4) +
-  xlab(NULL) +
-  ylab("Revenue in Millions") +
-  # scale_y_continuous(labels = dollar_format(prefix="$")) +
-  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
-  theme_bw() +
-  # theme_ipsum() +
-  coord_flip() +
-  ggtitle(paste0("Revenue from Select Species, ", broadzone)) +
-  # theme(text=element_text(size=10, family="serif"),
-  theme(text=element_text(size=10),
-        panel.grid.major = element_line(colour="gray", size=0.5),
-        # plot.title = element_text(hjust = 0.5, size=18))
-        plot.title = element_text())
-
-# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
-if (assignedColors) {
-  rp <- rp + uniqueSelectSpeciesScale
-} else {
-  rp <- rp + quantSpeciesScale
-}
-# dispay plot
-print(rp)
-# save to file
-ggsave(paste0(output_fselectspecies, "/SelectSpeciesRev_", substr(broadzone_underscore,0,30),".png"), plot = rp)
-# save to file - base functions
-# png(paste0(output_fselectspecies,"/OtherSpeciesRev_",broadzone,".png"))
-# print(rp)
-# dev.off()
-rm(rp)
-# alternatively, save plot as png and call
-# knitr::include_graphics("rrtools-steps-carbon.png")
-
-##########################################################################
-
-# sort by revenue
-allyrrev_table <- subset(sSpeciesArea, select = -Year ) %>%  
-  # select(Species, allyrtotal_rev, allyrtotal_land) %>% 
-  distinct(Species, allyrtotal_rev) %>%
-  arrange(desc(allyrtotal_rev)) %>%
-  # arrange(desc(allyearland_total)) %>%
-  dplyr::select(Species, allyrtotal_rev) %>% 
-  dplyr::rename("All Year Total" = allyrtotal_rev) %>% 
-  ungroup()
-  
-# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
-# TODO: add number to word function
-
-# convert fmp back to charaters - add totals row - format Landings column w/ $, commas, and rounded for estimation - *non-pipe way
-allyrrev_table$Species <- as.character(allyrrev_table$Species)
-allyrrev_table <- rbind(allyrrev_table, c("**Total**", colSums(allyrrev_table[,2]))) # allyrrev_table must be a tibble and without year column for this to work
-allyrrev_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE))) < 500,"<$500", comma_format(trim = TRUE, accuracy = 1000, prefix="$")(as.numeric(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-allyrrev_table[nrow(allyrrev_table),2] <- paste0("**",allyrrev_table[nrow(allyrrev_table),2],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrrev_table)[names(allyrrev_table) == "All Year Total"] <- paste0(numyear, " Year Total")
-
-cat("\n\n")
-
-print(kable(allyrrev_table, caption = paste0(numyear, ' Year Total Revenue, Select Species, ', broadzone), align=c('l', 'r'))) 
-  
-cat("\n\n\n\n\n\n")
-
-}
-
-cat("<br> ")
-
-
-```
-
-```{r selected_species_summary, results='asis', eval = select_species_section_summary} 
-
-section_name = "Select Species"
-section_table <- get("species_merge") %>% ungroup()
-margin <- "Species"
-
-cat("<br>") 
-
-cat("*Summary*")
-
-if (single_area_summaries) {
-  all_rev <- allyrrev_table %>% filter(.data[[margin]] == '**Total**') %>% select(-.data[[margin]])
-  all_land <- allyrland_table %>% filter(.data[[margin]] =="**Total**") %>% select(-.data[[margin]])
-  rev_land_total <- cbind(all_rev, all_land)
-  row.names(rev_land_total) <- "**Total**"
-  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', section_name, ' '), align=c('r', 'r')))
-} else {
-  counter = 1
-  for (ar in allZones) {
-    if (counter == 1) {
-      ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-    allyr_table <- as_tibble(section_table %>%  
-      select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%     # use .data[[margin]] to refer to column name stored as string
-      filter(Area == ar_u) %>% 
-      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
-      arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
-      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate("{margin}" := as.character(.data[[margin]])) %>% # use '"{margin}" :=' to refer to a column as a string
-      ungroup()) # have to convert to tibble to add up rows
-    allyr_table <- rbind(allyr_table, c("**Total**", ar, colSums(allyr_table[,3]), colSums(allyr_table[,4])))
-    allyr_table <- allyr_table %>% filter(.data[[margin]] =="**Total**")
-    counter = 2
-  } else {
-    ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-    allyr_table_2 <- as_tibble(section_table %>%  
-      filter(Area == ar_u) %>% 
-      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
-      arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
-      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate("{margin}" := as.character(.data[[margin]])) %>% 
-      ungroup())
-    
-    allyr_table_2 <- rbind(allyr_table_2, c("**Total**", ar, colSums(allyr_table_2[,3]), colSums(allyr_table_2[,4])))
-    allyr_table_2 <- allyr_table_2 %>% filter(.data[[margin]] =="**Total**")
-    allyr_table <- rbind(allyr_table, allyr_table_2)
-    }
-  }
-
-  allyr_table <- allyr_table %>% select(-.data[[margin]]) %>% mutate(`All Year Revenue` = round(as.double(`All Year Revenue`), digits = -3)) %>% mutate(`All Year Landings (Pounds)` = round(as.double(`All Year Landings (Pounds)`), digits = -3))
-  allyr_table <- rbind(allyr_table, c('**Total**', colSums(allyr_table[,2]), colSums(allyr_table[,3])))
-  
-  # Format columns
-  allyr_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyr_table$`All Year Revenue`))
-  allyr_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyr_table$`All Year Landings (Pounds)`))
-  
-  # Make bottom rows bold
-  allyr_table[nrow(allyr_table),2] <- paste0("**", allyr_table[nrow(allyr_table),2],"**")
-  allyr_table[nrow(allyr_table),3] <- paste0("**", allyr_table[nrow(allyr_table),3],"**")
-  
-  # set dynamic varible names (cant use paste0 in rename in tidyverse)
-  names(allyr_table)[names(allyr_table) == "Area"] <- paste0(proper(area_adjective), "Area")
-  names(allyr_table)[names(allyr_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
-  names(allyr_table)[names(allyr_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
-  
-  print(kable(allyr_table, caption = paste0(section_name, ' ', numyear,' Year Revenue and Landings '), align=c('l', 'r', 'r')))  
-  
-  }
-
-
-
-```
-
-
-```{r select_gear_types, results='asis', eval = select_gear_section}  
-# REVENUEFILE <- REVENUEFILE_backup
-
-cat("<br> \n\n")
-
-cat("### Select Gear Types \n") 
-
-cat("We analyzed select gear types to better understand the type of fishing occurring in", if(number_of_areas > 1) {paste0("these areas")} else {paste0(wind_area_name)},". The select gear types are: Dredge-Other, Dredge-Clam, Dredge-Scallop, Gillnet-Sink, Gillnet-Other, Weir-Trap, Seine-Purse, Seine-Other, Handline, Hand-Other, Trawl-Bottom, Trawl-Midwater, Longline-Bottom, Longline-Pelagic, Pot-Other, and Pot-Lobster. The category \"All Others\" refers to species with less than three permits or dealers impacted to protect data confidentiality.", " ", rounded_message, "\n\n\n")
-
-cat("<br>")
-
-##########################################################################
-# testing 
-# save_files = "n" #dont save files as csv or rdata
-# save_files = "c"
-
-# create new folder for section
-dir.create(file.path(output_f, "selectgeartype"), showWarnings = FALSE)
-output_fselectgeartype = file.path(output_f, "selectgeartype")
-
-# For figure numbering
-section_num = section_num + 1
-figure_num = 0
-
-###############################
-#### Set Select Gear Types ####
-###############################
-
-# New gear types specificed by Doug and Ben
-select_gear_codes <- as_tibble(REVENUEFILE)
-
-select_gear_codes <- select_gear_codes %>% 
-  mutate(gearcat_new = "") %>% 
-  # select(IDNUM, GEARCODE, gearcat_new) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('DRM','DRO','DRU'), 'DREDGE-OTHER', gearcat_new)) %>%
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('DRC'), 'DREDGE-CLAM', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('DRS', 'DTS', 'DTC', 'DSC'), 'DREDGE-SCALLOP', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('GNS'), 'GILLNET-SINK', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('GND', 'GNO','GNR','GNT'), 'GILLNET-OTHER', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('FYK','WEI','TRP'), 'WEIR-TRAP', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('PUR'), 'SEINE-PURSE', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('SED','SEH','SES','STS'), 'SEINE-OTHER', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('HND'), 'HANDLINE', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('RAK','DIV','HRP','CST'), 'HAND-OTHER', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('OBP', 'OHS','OTB','OTC','OTF','OTO','OTR','OTS','OTT','PTB', 'TTS'), 'TRAWL-BOTTOM', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('PTM','OTM'), 'TRAWL-MIDWATER', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('LLB'), 'LONGLINE-BOTTOM', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('LLP'), 'LONGLINE-PELAGIC', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('PTC','PTE','PTF','PTH', 'PTO','PTS','PTW','PTX'), 'POT-OTHER', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('PTL'), 'POT-LOBSTER', gearcat_new)) %>%  
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('OTH'), 'OTHER', gearcat_new)) %>%  
-  mutate(gearcat_new = ifelse(gearcat_new == "", '[blank]', gearcat_new)) 
-  
-###################################
-#### Set Select Gear Types end ####
-###################################
-
-
-################################################################
-#### Create Dataframe of Select Gear Types with PII Removed ####
-################################################################
-
-# PII fixed for all areas
-piiselect_gear_codes <- subset(select_gear_codes, !is.na(gearcat_new)) %>%
-  # dplyr::select(gearcat_new, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
-  dplyr::select(gearcat_new, Year, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM) %>% # for dealers
-  filter(Area != "Other") %>% 
-  group_by(gearcat_new, Year, Area) %>%
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF =  npermits < 3) %>%
-  # mutate(CONF2 = ndealers < 3) %>%
-  mutate(CONF =  npermits < 3 | ndealers < 3) %>%
-  mutate(gearcat_new_CONF = ifelse(CONF == T, 'All Others', gearcat_new)) %>%
-  ungroup() %>%
-  # dplyr::select(-starts_with("gearcat_new")) %>%
-  # dplyr::select(Year, InsideREV, InsideLANDED, npermits, gearcat_new_CONF) %>%
-  group_by(gearcat_new_CONF, Year, Area) %>%
-  dplyr::summarize(
-    yfa_rev = sum(InsideREV, na.rm = T),
-    yfa_land = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T)) %>% 
-  dplyr::rename("Gear_Type"= gearcat_new_CONF)
-
-gear_codesallyr_total <- piiselect_gear_codes %>% dplyr::select(Gear_Type, Year, Area, yfa_rev, yfa_land) %>% 
-  group_by(Gear_Type, Area) %>% 
-  dplyr::summarize(
-    allyrtotal_rev = sum(yfa_rev, na.rm = T),
-    allyrtotal_land = sum(yfa_land, na.rm = T)
-  )
-
-# gear_Type_merge <- merge(piiselect_gear_codes, gear_codesallyr_total, by = c("Gear_Type", "Area"))
-# keep as tibble - use dplyr functions insead of base
-gear_type_merge <- left_join(piiselect_gear_codes, gear_codesallyr_total, by = c("Gear_Type", "Area"))
-
-# Fix error with monkfish FMP by subtracting 227014.9999 from revenue
-# PIISPPNMAllYears[which(PIISPPNMAllYears$FMP == 'MONKFISH JOINT'),"InsideREV_total"] <- PIISPPNMAllYears[which(PIISPPNMAllYears$FMP=='MONKFISH JOINT'),"InsideREV_total"]-227014.9999
-
-#################################################################
-#### Create Dataframe of Select Gear_Type with PII Removed end ####
-#################################################################
-
-############################################
-#### Set plot colors for select species ####
-############################################
-# create custom color palette for all other unique FMPs 
-# (length(unique(gear_type_merge$FMP))-5)
-selectGear_TypebyArea <- gear_type_merge %>% group_by(Gear_Type, Area) %>%
-  dplyr::summarize(
-    REV = sum(yfa_rev, na.rm = T)
-    ) %>% 
-  ungroup %>% 
-  group_by(Area) %>% 
-  # top_n(., n=((length(unique(gear_type_merge$Gear_Type))-5)*-1), wt=REV) %>% 
-  arrange(Area, desc(REV)) %>% 
-  ungroup %>% 
-  mutate(Gear_Type = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(Gear_Type), perl=TRUE)) 
-
-# count of number of unique Gear_Type between each area
-# selectGear_TypebyArea <- within(selectGear_TypebyArea, { count <- ave(Area, Gear_Type, FUN=function(x) length(unique(x)))})
-# pull(selectGear_TypebyArea[selectGear_TypebyArea$count==1,"Gear_Type"]) # get vector of Gear_Type not shared by all areas
-
-NumUniqueMargins <- length(unique(selectGear_TypebyArea$Gear_Type))
-
-UniqueMargins <- unique(selectGear_TypebyArea$Gear_Type)
-
-# make extra colors if more unique Gear_Types than maximum colors for palette
-if (NumUniqueMargins > maxUniqueColors) {
-  getPalette = colorRampPalette(brewer.pal(maxUniqueColors, paletteName3))
-  myColors <- getPalette(NumUniqueMargins) 
-} else {
-  myColors <- brewer.pal(NumUniqueMargins, paletteName3) # create list of colors using number of unique Gear_Types from pallettte name
-}
-
-names(myColors) <- UniqueMargins # name colors for color scale
-
-uniqueSelectGear_TypeScale <- scale_fill_manual(name = NULL, values = myColors, guide = guide_legend(reverse = TRUE))
-
-# original color scale based on revenue quanities
-quantGear_TypeScale <- scale_fill_brewer(name = NULL, palette = "RdYlBu",
-                                     direction = -1, guide = guide_legend(reverse = TRUE))
-
-rm(NumUniqueMargins, UniqueMargins) # garbage collection
-
-################################################
-#### Set plot colors for select species end ####
-################################################
-
-# Replace 'None' with pretty wording 
-# REVENUEFILE$FMP[REVENUEFILE$FMP=="None"] <- "No Federal FMP"
-
-# get vector of all zones except "Other"
-# allZones <- unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ]
-
-# ### get only data for Hudson_North
-# broadzone = "Fairways North"
-# broadzone = "Fairways_South"
-# broadzone = "Hudson_North"
-# broadzone = "Hudson_South"
-# replace underscores with space and capitalize each word (for plot title automation)
-# broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE)
-
-
-#### get rev and landing plots and tables for all zones
-for (broadzone in allZones) {
-  figure_num = figure_num + 1
-  # broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE) # make name pretty
-  # cat("\raggedright")
-  # cat(paste0("*", broadzone, "*", "  ", "\n\n"),"  ") # display name of broadzone on vignette
-  # broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", broadzone), perl=TRUE) # make spaces underscores in area
-  broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", broadzone)), perl=TRUE) # make spaces underscores and backslashs as dashes in area
-
-###################################################################
-# landings plot and table
-  
-# filter by area
-sGear_TypeArea <- gear_type_merge %>% filter(Area == broadzone_underscore)
-
-# make Gear_Type names lowercase
-sGear_TypeArea$Gear_Type <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(sGear_TypeArea$Gear_Type), perl=TRUE)
-# sGear_TypeArea$Gear_Type[sGear_TypeArea$Gear_Type=="None"] <- "No Federal FMP"
-
-# change order of stack
-sGear_TypeArea$Gear_Type <- reorder(sGear_TypeArea$Gear_Type, sGear_TypeArea$yfa_land)
-sGear_TypeArea$Gear_Type <- factor(sGear_TypeArea$Gear_Type, levels=levels(sGear_TypeArea$Gear_Type))
-
-# sGear_TypeArea$Gear_Type <- reorder(sGear_TypeArea$Gear_Type, sGear_TypeArea$sum_rev)
-# sGear_TypeArea$Gear_Type <- factor(sGear_TypeArea$Gear_Type, levels=levels(sGear_TypeArea$Gear_Type))
-
-# cat("\centering")
-cat("Figure ", section_num,".", figure_num, " Landings of Select Gear Types, ", broadzone, "  \n\n", sep = "")
-
-# plot
-lp <- ggplot(sGear_TypeArea, aes(x = Year, y = yfa_land/1000000, fill=Gear_Type)) +
-  geom_col(width=0.4) +
-  xlab(NULL) +
-  ylab("Millions of Pounds") +
-  # scale_y_continuous() +
-  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) + 
-  theme_bw() +
-  # theme_ipsum() +
-  coord_flip() +
-  ggtitle(paste0(" Landings of Select Gear Types, ",broadzone)) +
-  # theme(text=element_text(size=10, family="serif"),
-  theme(text=element_text(size=10),
-        panel.grid.major = element_line(colour="gray", size=0.5),
-        # plot.title = element_text(hjust = 0.5, size=18))
-        plot.title = element_text())
-
-# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
-if (assignedColors) {
-  lp <- lp + uniqueSelectGear_TypeScale
-} else {
-  lp <- lp + quantGear_TypeScale
-}
-# dispay plot
-print(lp)
-
-# save to file
-ggsave(paste0(output_fselectgeartype,"/Select_Gear_Type_Land_", substr(broadzone_underscore,0,30),".png"), plot = lp)
-# save to file - base functions
-# png(paste0(output_fselectgeartype,"/Gear_TypeLand_",broadzone,".png"))
-# print(lp)
-# dev.off()
-rm(lp)
-# alternatively, save plot as png and call
-# knitr::include_graphics("rrtools-steps-carbon.png")
-
-# sort by landings
-allyrland_table <- subset(sGear_TypeArea, select = -Year ) %>%  
-  # select(Gear_Type, allyrtotal_rev, allyrtotal_land) %>% 
-  distinct(Gear_Type, allyrtotal_rev, allyrtotal_land) %>%
-  arrange(desc(allyrtotal_land)) %>%
-  # arrange(desc(allyearland_total)) %>%
-  dplyr::select(Gear_Type, allyrtotal_land) %>% 
-  dplyr::rename("All Year Total" = allyrtotal_land) %>% 
-  dplyr::rename("Gear Type" = Gear_Type) %>% 
-  ungroup()
-  
-# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
-# TODO: add number to word function
-
-# convert fmp back to charaters - add totals row - format Landings column w/ $, commas, and rounded for estimation - *non-pipe way
-allyrland_table$"Gear Type" <- as.character(allyrland_table$"Gear Type")
-allyrland_table <- rbind(allyrland_table, c("**Total**", colSums(allyrland_table[,2]))) # allyrland_table must be a tibble and without year column for this to work
-# allyrland_table$`All Year Total` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyrland_table$`All Year Total`))
-allyrland_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE))) < 500,"<500", comma_format(trim = TRUE, accuracy = 1000)(as.numeric(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-allyrland_table[nrow(allyrland_table),2] <- paste0("**",allyrland_table[nrow(allyrland_table),2],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- paste0(numyear, " Year Landings")
-
-cat("\n\n")
-
-print(kable(allyrland_table, caption = paste0(numyear, ' Year Total Landings (Pounds), Select Gear Types, ',broadzone), align=c('l', 'r')))
-  
-cat("\n\n\n\n\n\n")
-  
-###################################################################
-# revenue plot and table
-figure_num = figure_num + 1
-
-rm(sGear_TypeArea)
-
-sGear_TypeArea <- gear_type_merge %>% filter(Area == broadzone_underscore)
-
-# make FMP names lowercase
-sGear_TypeArea$Gear_Type <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(sGear_TypeArea$Gear_Type), perl=TRUE)
-# sGear_TypeArea$Gear_Type[sGear_TypeArea$Gear_Type=="None"] <- "No Federal FMP"
-
-# change order of stack
-sGear_TypeArea$Gear_Type <- reorder(sGear_TypeArea$Gear_Type, sGear_TypeArea$yfa_rev)
-sGear_TypeArea$Gear_Type <- factor(sGear_TypeArea$Gear_Type, levels=levels(sGear_TypeArea$Gear_Type))
-
-cat("Figure ", section_num,".", figure_num, " Revenue from Select Gear Types, ", broadzone, "  \n\n", sep = "")
-
-# plot
-rp <- ggplot(sGear_TypeArea, aes(x = Year, y = yfa_rev/1000000, fill=Gear_Type)) +
-  geom_col(width=0.4) +
-  xlab(NULL) +
-  ylab("Revenue in Millions") +
-  # scale_y_continuous(labels = dollar_format(prefix="$")) +
-  scale_y_continuous(expand=expansion(mult=c(0, 0.1))) +
-  theme_bw() +
-  # theme_ipsum() +
-  coord_flip() +
-  ggtitle(paste0("Revenue from Select Gear Types, ", broadzone)) +
-  # theme(text=element_text(size=10, family="serif"),
-  theme(text=element_text(size=10),
-        panel.grid.major = element_line(colour="gray", size=0.5),
-        # plot.title = element_text(hjust = 0.5, size=18))
-        plot.title = element_text())
-
-# if assignedColors variable is set to TRUE, use custom color palette scale otherwise use original quantitive scale 
-if (assignedColors) {
-  rp <- rp + uniqueSelectGear_TypeScale
-} else {
-  rp <- rp + quantGear_TypeScale
-}
-# dispay plot
-print(rp)
-# save to file
-ggsave(paste0(output_fselectgeartype, "/Select_Gear_Type_Rev_", substr(broadzone_underscore,0,30),".png"), plot = rp)
-# save to file - base functions
-# png(paste0(output_fselectgeartype,"/OtherGear_TypeRev_",broadzone,".png"))
-# print(rp)
-# dev.off()
-rm(rp)
-# alternatively, save plot as png and call
-# knitr::include_graphics("rrtools-steps-carbon.png")
-
-##########################################################################
-
-# sort by revenue
-allyrrev_table <- subset(sGear_TypeArea, select = -Year ) %>%  
-  # select(Gear_Type, allyrtotal_rev, allyrtotal_land) %>% 
-  distinct(Gear_Type, allyrtotal_rev) %>%
-  arrange(desc(allyrtotal_rev)) %>%
-  # arrange(desc(allyearland_total)) %>%
-  dplyr::select(Gear_Type, allyrtotal_rev) %>% 
-  dplyr::rename("All Year Total" = allyrtotal_rev) %>% 
-  dplyr::rename("Gear Type" = Gear_Type) %>% 
-  ungroup()
-  
-# %>%  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
-# TODO: add number to word function
-
-# convert fmp back to charaters - add totals row - format Landings column w/ $, commas, and rounded for estimation - *non-pipe way
-allyrrev_table$"Gear Type" <- as.character(allyrrev_table$"Gear Type")
-allyrrev_table <- rbind(allyrrev_table, c("**Total**", colSums(allyrrev_table[,2]))) # allyrrev_table must be a tibble and without year column for this to work
-allyrrev_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE))) < 500,"<$500", comma_format(trim = TRUE, accuracy = 1000, prefix="$")(as.numeric(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-allyrrev_table[nrow(allyrrev_table),2] <- paste0("**",allyrrev_table[nrow(allyrrev_table),2],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrrev_table)[names(allyrrev_table) == "All Year Total"] <- paste0(numyear, " Year Revenue")
-
-cat("\n\n")
-
-print(kable(allyrrev_table, caption = paste0(numyear, ' Year Total Revenue, Select Gear Types, ', broadzone), align=c('l', 'r')))
-  
-cat("\n\n\n\n\n\n")
-
-}
-
-
-```
-
-
-
-```{r select_gear_code_summary, results='asis', eval = select_gear_section_summary} 
-
-section_name = "Select Gear Types"
-section_table <- get("gear_type_merge") %>% ungroup()
-margin <- "Gear_Type"
-
-cat("<br>") 
-
-cat("*Summary*")
-
-if (single_area_summaries) {
-  all_rev <- allyrrev_table %>% filter(.data[[margin]] == '**Total**') %>% select(-.data[[margin]])
-  all_land <- allyrland_table %>% filter(.data[[margin]] =="**Total**") %>% select(-.data[[margin]])
-  rev_land_total <- cbind(all_rev, all_land)
-  row.names(rev_land_total) <- "**Total**"
-  print(kable(rev_land_total, caption = paste0(numyear,' Year Landings and Revenue, ', section_name, ' '), align=c('r', 'r')))
-} else {
-  counter = 1
-  for (ar in allZones) {
-    if (counter == 1) {
-      ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-    allyr_table <- as_tibble(section_table %>%  
-      select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%     # use .data[[margin]] to refer to column name stored as string
-      filter(Area == ar_u) %>% 
-      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
-      arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
-      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate("{margin}" := as.character(.data[[margin]])) %>% # use '"{margin}" :=' to refer to a column as a string
-      ungroup()) # have to convert to tibble to add up rows
-    allyr_table <- rbind(allyr_table, c("**Total**", ar, colSums(allyr_table[,3]), colSums(allyr_table[,4])))
-    allyr_table <- allyr_table %>% filter(.data[[margin]] =="**Total**")
-    counter = 2
-  } else {
-    ar_u <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", ar)), perl=TRUE)
-    allyr_table_2 <- as_tibble(section_table %>%  
-      filter(Area == ar_u) %>% 
-      distinct(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>%
-      arrange(desc(allyrtotal_land)) %>%
-      dplyr::select(.data[[margin]], Area, allyrtotal_rev, allyrtotal_land) %>% 
-      dplyr::rename("All Year Revenue" = allyrtotal_rev, "All Year Landings (Pounds)" = allyrtotal_land) %>% 
-      mutate("{margin}" := as.character(.data[[margin]])) %>% 
-      ungroup())
-    
-    allyr_table_2 <- rbind(allyr_table_2, c("**Total**", ar, colSums(allyr_table_2[,3]), colSums(allyr_table_2[,4])))
-    allyr_table_2 <- allyr_table_2 %>% filter(.data[[margin]] =="**Total**")
-    allyr_table <- rbind(allyr_table, allyr_table_2)
-    }
-  }
-
-  allyr_table <- allyr_table %>% select(-.data[[margin]]) %>% mutate(`All Year Revenue` = round(as.double(`All Year Revenue`), digits = -3)) %>% mutate(`All Year Landings (Pounds)` = round(as.double(`All Year Landings (Pounds)`), digits = -3))
-  allyr_table <- rbind(allyr_table, c('**Total**', colSums(allyr_table[,2]), colSums(allyr_table[,3])))
-  
-  # Format columns
-  allyr_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyr_table$`All Year Revenue`))
-  allyr_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyr_table$`All Year Landings (Pounds)`))
-  
-  # Make bottom rows bold
-  allyr_table[nrow(allyr_table),2] <- paste0("**", allyr_table[nrow(allyr_table),2],"**")
-  allyr_table[nrow(allyr_table),3] <- paste0("**", allyr_table[nrow(allyr_table),3],"**")
-  
-  # set dynamic varible names (cant use paste0 in rename in tidyverse)
-  names(allyr_table)[names(allyr_table) == "Area"] <- paste0(proper(area_adjective), "Area")
-  names(allyr_table)[names(allyr_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
-  names(allyr_table)[names(allyr_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
-  
-  print(kable(allyr_table, caption = paste0(section_name, ' ', numyear,' Year Revenue and Landings '), align=c('l', 'r', 'r')))  
-  
-  }
-```
-
-```{r bottom_tending_mobile_gear, results='asis', eval = F} 
-
-cat("### Bottom Tending Mobile Gear")
-
-cat("Due to the impact wind turbine construction may have on the ocean floor, we isolated revenue and landings accomplished with mobile bottom tending gear. The following gear were isolated and presented by area:
-
-* Dredges: ocean quahog/surfclam, mussel, sea scallop, urchin, modified and unmodified chain-mat scallop, scallop with turtle deflector, and other
-* Otter trawls: bottom (fish, scallop, shrimp, other), including those with haddock separator, Ruhle trawl, beam trawl, twin trawls, pair trawls, and other")
-
-##########################################################################
-# testing
-# save_files = "n" #dont save files as csv or rdata
-# save_files = "c" 
-
-# create new folder for section
-dir.create(file.path(output_f, "bottomgear"), showWarnings = FALSE)
-output_fbottomgear = file.path(output_f, "bottomgear")
-
-##########################################################################
-# Bottom tending gear tables
-
-# all gearids in rev file
-# sort(unique(REVENUEFILE$GEARCODE))
-
-# requested gear types
-bottomGear <- c("DRO", "DRS", "DSC", "DTC", "DTS", "OHS", "OTB", "OTC", "OTF", "OTO", "OTR", "OTS", "OTT")
-
-# quick check
-# sort(unique(REVENUEFILE$GEARCODE))[sort(unique(REVENUEFILE$GEARCODE)) %in% bottomGear]
-# length(bottomGear) == length(sort(unique(REVENUEFILE$GEARCODE))[sort(unique(REVENUEFILE$GEARCODE)) %in% bottomGear])
-
-# Fix error with monkfish FMP by subtracting 227014.9999 from revenue
-# PIISPPNMAllYears[which(PIISPPNMAllYears$FMP == 'MONKFISH JOINT'),"InsideREV_total"] <- PIISPPNMAllYears[which(PIISPPNMAllYears$FMP=='MONKFISH JOINT'),"InsideREV_total"]-227014.9999
-
-# PII fixed for all areas
-piigearids <- REVENUEFILE %>%
-  dplyr::select(FMP, GEARCODE, Year, InsideREV, InsideLANDED, PERMIT, Area) %>%
-  # dplyr::select(GEARCODE, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
-  filter(Area != "Other") %>% 
-  filter(GEARCODE %in% bottomGear) %>%
-  group_by(FMP, Year, Area) %>%
-  dplyr::summarize(
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    # ndealers = length(unique(DEALNUM))
-    ) %>%
-  mutate(CONF =  npermits < 3) %>%
-  # mutate(CONF2 =  ndealers < 3) %>%
-  mutate(FMP_CONF = ifelse(CONF == T, 'All Others', FMP)) %>%
-  ungroup() %>%
-  # dplyr::select(-starts_with("GEARCODE")) %>%
-  # dplyr::select(Year, InsideREV, InsideLANDED, npermits, GEARCODE_CONF) %>%
-  group_by(FMP_CONF, Year, Area) %>%
-  dplyr::summarize(
-    yfa_rev = sum(InsideREV, na.rm = T),
-    yfa_land = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T)) %>% 
-  dplyr::rename("FMP"= FMP_CONF)
-
-gearidsallyr_total <- piigearids %>% dplyr::select(FMP, Year, Area, yfa_rev, yfa_land) %>% 
-  group_by(FMP, Area) %>% 
-  dplyr::summarize(
-    allyrtotal_rev = sum(yfa_rev, na.rm = T),
-    allyrtotal_land = sum(yfa_land, na.rm = T)
-  )
-
-# gear_Type_merge <- merge(piigearids, gear_codesallyr_total, by = c("Species", "Area"))
-# keep as tibble - use dplyr functions insead of base
-gearids_merge <- left_join(piigearids, gearidsallyr_total, by = c("FMP", "Area"))
-
-# rm(gearids_merge)
-
-###############################################################################################################################################################
-
-# Replace 'None' with pretty wording 
-# REVENUEFILE$FMP[REVENUEFILE$FMP=="None"] <- "No Federal FMP"
-
-# get vector of all zones except "Other"
-# allZones <- unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ]
-
-# ### get only data for Hudson_North
-# broadzone = "Fairways_North"
-# broadzone = "Fairways_South"
-# broadzone = "Hudson_North"
-# broadzone = "Hudson_South"
-# broadzone = "OCS_A_0486"
-# replace underscores with space and capitalize each word (for plot title automation)
-# broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE)
-
-
-#### get rev and landing plots and tables for all zones
-for (broadzone in allZones) {
-  # broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", broadzone)), perl=TRUE) # make name pretty
-  # cat("\raggedright")
-  # cat(paste0("*", broadzone, "*", "  ", "\n\n"),"  ") # display name of broadzone on vignette
-  # broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", broadzone), perl=TRUE) # make spaces underscores in area
-  broadzone_underscore <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("\\s","_", gsub("/","-", broadzone)), perl=TRUE) # make spaces underscores and backslashs as dashes in area
-  
-######################################################################################################################################
-######################################################################################################################################
-# landings plot and table
-  
-# filter by area
-gearidArea <- gearids_merge %>% filter(Area == broadzone_underscore)
-# rm(gearidArea)
-# TODO: save as speadsheet
-
-# remove uneeded columns
-# allyrgearid_table <- gearidArea %>%  dplyr::select(-c("npermits", "Year", "Area", "yfa_rev", "yfa_land"))
-allyrgearid_table <- gearidArea[ , !(names(gearidArea) %in% c("npermits", "Year", "Area", "yfa_rev", "yfa_land") )]
-
-allyrgearid_table <- allyrgearid_table %>% 
-  distinct(FMP, allyrtotal_rev, allyrtotal_land) %>% 
-  dplyr::rename('All Year Revenue' = allyrtotal_rev, 'All Year Landings (Pounds)' = allyrtotal_land ) %>% 
-  arrange(desc(`All Year Revenue`, .by_group = TRUE)) # sort by revenue
-  # subset(allyrgearid_table, allyrgearid_table$`All Year Revenue`<500)[order(allyrgearid_table$FMP, allyrgearid_table$`All Year Revenue` < 500), ] #order fmps alphabetically if less then $500
-
-# rm(allyrgearid_table)
-
-# uncomment below if alphabetical sorting is requested
-# allyrgearid_table <- allyrgearid_table %>% arrange(FMP, .by_group = TRUE)
-
-# TODO: export as speadsheet
-# save to csv
-if (save_files == "c" | save_files == "b" ) {
-  write.csv(allyrgearid_table, file=file.path(output_fbottomgear,
-                                     paste0(gsub(pattern="[a-z]?", replacement="", broadzone_underscore),
-                                            "_bottomgear.csv")), row.names=FALSE)
-}
-# for text box
-highestfmp_nm <- head(allyrgearid_table$FMP, 1)
-highestfmp_rev <- head(allyrgearid_table$`All Year Revenue`, 1)
-rev_total <- allyrgearid_table %>% 
-  dplyr::summarize(rev_total = sum(`All Year Revenue`, na.rm = T)) %>% 
-  pull(rev_total)
-land_total <- allyrgearid_table %>% 
-  dplyr::summarize(land_total = sum(`All Year Landings (Pounds)`, na.rm = T)) %>% 
-  pull(land_total)
-
-# make FMP names lowercase
-allyrgearid_table$FMP[allyrgearid_table$FMP=="None"] <- "No Federal FMP"
-allyrgearid_table$FMP <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(allyrgearid_table$FMP), perl=TRUE)
-# allyrgearid_table$FMP[allyrgearid_table$FMP=="None"] <- "No Federal FMP"
-allyrgearid_table <- rbind(allyrgearid_table, c("**Total**", colSums(allyrgearid_table[,2]), colSums(allyrgearid_table[,3])))
-allyrgearid_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrgearid_table[2], use.names = FALSE))) < 500,"<$500", comma_format(trim = TRUE, accuracy = 1000, prefix="$")(as.numeric(as.numeric(gsub(",","", x = unlist(allyrgearid_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-allyrgearid_table[,3] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrgearid_table[3], use.names = FALSE))) < 500,"<500", comma_format(trim = TRUE, accuracy = 1000)(as.numeric(as.numeric(gsub(",","", x = unlist(allyrgearid_table[3], use.names = FALSE)))))) # add less than sign if revenue is less than $500
-# allyrgearid_table$`All Year Revenue` <- comma_format( prefix = "$", trim = FALSE, accuracy = 1000)(as.numeric(allyrgearid_table$`All Year Revenue`))
-# allyrgearid_table$`All Year Landings (Pounds)` <- comma_format(trim = TRUE, accuracy = 1000)(as.numeric(allyrgearid_table$`All Year Landings (Pounds)`))
-# Make bottom rows bold
-allyrgearid_table[nrow(allyrgearid_table),2] <- paste0("**",allyrgearid_table[nrow(allyrgearid_table),2],"**")
-allyrgearid_table[nrow(allyrgearid_table),3] <- paste0("**",allyrgearid_table[nrow(allyrgearid_table),3],"**")
-
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrgearid_table)[names(allyrgearid_table) == "All Year Revenue"] <- paste0(numyear, " Year Revenue")
-names(allyrgearid_table)[names(allyrgearid_table) == "All Year Landings (Pounds)"] <- paste0(numyear, " Year Landings (Pounds)")
-
-cat("\n\n")
-cat("This table displays each FMP’s ",numbers2words(length(START.YEAR:END.YEAR))," year total revenue and total landings when only considering bottom tending gear. ", trimws(gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(highestfmp_nm), perl=TRUE)), " FMP had the greatest revenue and gross landings by bottom tending gear, comprising approximately ", number_format(accuracy = 1)(highestfmp_rev/rev_total*100)," percent of total associated revenue. A total of ", numbersuffix(round(land_total, -3))," pounds were landed in ",broadzone," by bottom tending gear during the ",numbers2words(length(START.YEAR:END.YEAR))," year period of analysis, generating an estimated ", paste0("$",numbersuffix(round(land_total, -3)), sep=""),". ",sep = "")
-
-cat("\n\n")
-
-print(kable(allyrgearid_table, caption = paste0('Revenue and Landings by Bottom Tending Gear ',START.YEAR,"-", END.YEAR, " ", broadzone), align=c('l', 'r', 'r')))
-
-cat("\n\n")
-
-######################################################################################################################################
-######################################################################################################################################
-
-}
-
-
-```
+### Revenue by Port
 
 
 ```{r revenues_by_port_dynamic_text, results='asis', eval = T} 
@@ -3546,9 +1722,6 @@ ports_dynamic_text <- paste0(top_revenue_city_name," receives the highest value 
 
 
 ```
-
-### Revenue by Port
-
 The ten most impacted (by revenue) ports are listed below. These ports are estimated to receive the most landings from fishing done within the `r wind_area_name` `r if(number_of_areas > 1) {paste0("areas")} else {paste0("area")}`. The table below displays each port’s landings breakdown by `r area_adjective`area. Both tables present the cumulative revenues from `r paste0(START.YEAR, "-", END.YEAR )`. `r ports_dynamic_text` `r rounded_message`   
 
 
@@ -3695,46 +1868,6 @@ dir.create(file.path(output_f, "permit"), showWarnings = FALSE)
 output_fpermit = file.path(output_f, "permit")
 
 
-# pii for permits
-# TODO: may need to consider pii for dealers
-
-###########################################################################
-############################## Boxplot table ##############################
-###########################################################################
-
-# # PII fixed for all areas
-# piipermit <- subset(REVENUEFILE, !is.na(FMP)) %>%
-#   dplyr::select(Year,REVENUE, InsideREV, InsideLANDED, PERMIT, Area) %>%
-#   # dplyr::select(FMP, Year, InsideREV, InsideLANDED, PERMIT, DEALNUM) %>% # for dealers
-#   # dplyr::select(Year, PERMIT, Area) %>%
-#   filter(Area != "Other") %>% 
-#   group_by(Year, Area) %>%
-#   dplyr::summarize(
-#     AllREV = sum(REVENUE, na.rm = T),
-#     InsideREV = sum(InsideREV, na.rm = T),
-#     InsideLANDED = sum(InsideLANDED, na.rm = T),
-#     npermits = length(unique(PERMIT)),
-#     # ndealers = length(unique(DEALNUM))
-#     ) %>%
-#   mutate(CONF =  npermits < 3) %>%
-#   # mutate(CONF2 =  ndealers < 3) %>%
-#   # mutate(FMP_CONF = ifelse(CONF == T, 'All Others', FMP)) %>%
-#   ungroup() %>%
-#   # dplyr::select(-starts_with("FMP")) %>%
-#   # dplyr::select(Year, InsideREV, InsideLANDED, npermits, FMP_CONF) %>%
-#   group_by(Year, Area) %>%
-#   dplyr::summarize(
-#     yfa_AllREV = sum(AllREV, na.rm = T),
-#     yfa_rev = sum(InsideREV, na.rm = T),
-#     yfa_land = sum(InsideLANDED, na.rm = T),
-#     npermits = sum(npermits, na.rm = T)) %>% 
-#   mutate(PercOfTotal = (yfa_rev/yfa_AllREV)*100) %>% 
-#   arrange(desc(PercOfTotal))
-# 
-# if (save_files == "c" | save_files == "b" ) {
-#   write.csv(piipermit, file=file.path(output_f,"permitareas.csv"), row.names=FALSE)
-# }
-
 # PII fixed for all areas
 piipermitAllyear <- REVENUEFILE %>%
   dplyr::select(Year, REVENUE, InsideREV, InsideLANDED, PERMIT, Area) %>%
@@ -3777,10 +1910,6 @@ if (save_files == "c" | save_files == "b" ) {
   write.csv(piipermitAllyear, file=file.path(output_f,"permitareas.csv"), row.names=FALSE)
 }
 
-# this creates a table of summary statistics for percent of revenues of permits in the areas 
-# *** values in the table that are less than .01 are displayed as 0 
-# * values in the table are rounded to .01
-# * values in the table that are greater than .99 are displayed as whole numbers
 for (aa in unique(piipermitAllyear$Area)) { #loop through all areas
   broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", aa)), perl=TRUE)
   permitarea <- piipermitAllyear %>% filter(Area == aa)
@@ -3856,48 +1985,14 @@ for (z in unique(PermitInsideRev$Zone)) {
                                     fill = "NA", 
                                     size = 0.5))
   
-# ### base version ###
-# boxplot <- boxplot(Permitboxplot$Percent~Permitboxplot$Year,
-#         horizontal=TRUE,
-#         main=broadz,
-#         xlab='Percent Total Revenue by Permit',
-#         col=c("cadetblue1","cadetblue2","cadetblue3","cadetblue","cadetblue4"))
-
 print(boxplot)
 # save to file
 ggsave(paste0(output_fpermit, "/boxplot_", substr(broadzone_underscore,0,30),".png"), plot = boxplot)
-# save to file - base functions
-# png(paste0(output_fpermit,"/boxplot_",broadzone,".png"))
-# print(boxplot)
-# dev.off()
 rm(boxplot)
-# alternatively, save plot as png and call
-# knitr::include_graphics("rrtools-steps-carbon.png")
-# cat("\n\n")
 }
 
 
-cat("\n\n")
 
-
-# from original rscript - permit percentages are off
-# PERMIT_DATA <- aggregate(InsideREV~Year+PERMIT+Area, data=REVENUEFILE[REVENUEFILE$Area!='Other',],FUN=sum)
-# PERMIT_TOTAL <- aggregate(REVENUE~Year+PERMIT, data=FIN, FUN=sum)
-# PERMIT_DATA <- merge(PERMIT_DATA,PERMIT_TOTAL,
-#                    by.x=c('Year','PERMIT'),by.y=c('YEAR','PERMIT'), all.x=TRUE, all.y=FALSE)
-# PERMIT_DATA$PERMIT_PCT <- 100*PERMIT_DATA$InsideREV/PERMIT_DATA$REVENUE
-# ZONE_NAMES <- unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other"]
-# 
-# for (i in ZONE_NAMES) {
-#   TEMP <- PERMIT_DATA[PERMIT_DATA$Area==i,]
-#   NCOLORS <- length(unique(TEMP$Year))
-#   myColours <- brewer.pal( NCOLORS,"RdBu")
-#   pdf(file.path(output_f, paste0(project_name,"_REV_PCT_PERMIT_",i,".pdf")))
-#   print(boxplot(PERMIT_PCT~Year, horizontal=TRUE,data=TEMP,
-#                 xlab='Percent Total PERMIT Revenue',par.settings = my.settings,las=2,par(mar=c(5,11,4,2)+0.1),col=myColours))
-#   dev.off()
-#   rm(TEMP)
-# }
   
 
 
@@ -4261,7 +2356,6 @@ allareasppnm_table <- piisppnm[ , !(names(piisppnm) %in% "npermits" )] %>%
 # write.csv(selectsppnm_table, file=file.path(output_ffisherydependence,"selectsppnm_table.csv"), row.names=FALSE)
 
 for (zone in allZones) {
-  figure_num = figure_num + 1
   zone <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub(" ","_", zone), perl=TRUE) # make name pretty
   broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", zone), perl=TRUE) # make name pretty
   # cat("\raggedright")
@@ -4350,209 +2444,6 @@ for (zone in allZones) {
 cat("<br> ")
 
 ```
-
-
-
-
-
-
-
-```{r select_gear_custom_table, include=FALSE, eval = select_gear_custom}  
-###############################
-#### Set Select Gear Types ####
-###############################
-
-# New gear types specificed by Doug and Ben
-select_gear_codes <- as_tibble(REVENUEFILE)
-
-select_gear_codes <- select_gear_codes %>% 
-  mutate(gearcat_new = "") %>% 
-  # select(IDNUM, GEARCODE, gearcat_new) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('DRM','DRO','DRU'), 'DREDGE-OTHER', gearcat_new)) %>%
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('DRC'), 'DREDGE-CLAM', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('DRS', 'DTS', 'DTC', 'DSC'), 'DREDGE-SCALLOP', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('GNS'), 'GILLNET-SINK', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('GND', 'GNO','GNR','GNT'), 'GILLNET-OTHER', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('FYK','WEI','TRP'), 'WEIR-TRAP', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('PUR'), 'SEINE-PURSE', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('SED','SEH','SES','STS'), 'SEINE-OTHER', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('HND'), 'HANDLINE', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('RAK','DIV','HRP','CST'), 'HAND-OTHER', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('OBP', 'OHS','OTB','OTC','OTF','OTO','OTR','OTS','OTT','PTB', 'TTS'), 'TRAWL-BOTTOM', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('PTM','OTM'), 'TRAWL-MIDWATER', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('LLB'), 'LONGLINE-BOTTOM', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('LLP'), 'LONGLINE-PELAGIC', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('PTC','PTE','PTF','PTH', 'PTO','PTS','PTW','PTX'), 'POT-OTHER', gearcat_new)) %>% 
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('PTL'), 'POT-LOBSTER', gearcat_new)) %>%  
-  mutate(gearcat_new = ifelse(GEARCODE %in% c('OTH'), 'OTHER', gearcat_new)) %>%  
-  mutate(gearcat_new = ifelse(gearcat_new == "", '[blank]', gearcat_new)) 
-  
-###################################
-#### Set Select Gear Types end ####
-###################################
-
-################################################################
-#### Create Dataframe of ALL QTYKEPT and REVENUE, aggregated by REGIME 
-## 96 observations: 16 GEAR, 2 Regimes, 3 months   ####
-################################################################
-
-select_gear_codes2<-select_gear_codes %>%
-    mutate(REGIME = ifelse(Year <= 2014, 1, 2)) %>%
-    dplyr::select(gearcat_new, REGIME, MONTH, PERMIT, DEALNUM, IDNUM, QTYKEPT, REVENUE) %>% # for dealers
-    dplyr::distinct(gearcat_new, REGIME, MONTH, PERMIT, DEALNUM, IDNUM, QTYKEPT, REVENUE)
-
-# PII fixed for all areas; aggregated at the REGIME level (2010-2014 and 2015-2019)
-allactive <- subset(select_gear_codes2, !is.na(gearcat_new)) %>%
-  # dplyr::select(gearcat_new, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
-  dplyr::select(gearcat_new, REGIME, MONTH, PERMIT, DEALNUM, IDNUM, QTYKEPT, REVENUE) %>% # for dealers
-  filter(MONTH  >=9 & MONTH<=11) %>% 
-  group_by(gearcat_new, REGIME, MONTH) %>%
-  dplyr::summarize(
-    nTrips = length(unique(IDNUM)),
-    TotalRev = sum(REVENUE, na.rm = T),
-    TotalLand = sum(QTYKEPT, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # mutate(CONF =  npermits < 3) %>%
-  # mutate(CONF2 = ndealers < 3) %>%
-  ungroup() %>%
-  # dplyr::select(-starts_with("gearcat_new")) %>%
-  # dplyr::select(Year, InsideREV, InsideLANDED, npermits, gearcat_new_CONF) %>%
-  group_by(gearcat_new, REGIME, MONTH) %>%
-  dplyr::summarize(
-    Revenue_SM = sum(TotalRev, na.rm = T),
-    Pounds_SM = sum(TotalLand, na.rm = T),
-    npermits_SM = sum(npermits, na.rm = T),
-    ntrips_SM = sum(nTrips, na.rm = T)) %>% 
-  dplyr::rename("Gear_Type"= gearcat_new) 
-
-
-
-
-
-################################################################
-#### Create Dataframe of ALL QTYKEPT and REVENUE, aggregated by REGIME Inside each Area
-## 96 observations: 16 GEAR, 2 Regimes, 3 months, 4 Area   ####
-################################################################
-
-# PII fixed for all areas; aggregated at the REGIME level (2010-2014 and 2015-2019)
-piiselect_gear_codes <- subset(select_gear_codes, !is.na(gearcat_new)) %>%
-  mutate(REGIME = ifelse(Year <= 2014, 1, 2)) %>%
-  # dplyr::select(gearcat_new, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
-  dplyr::select(gearcat_new, REGIME, MONTH, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM, IDNUM) %>% # for dealers
-  filter(Area != "Other") %>% 
-  filter(MONTH  >=9 & MONTH<=11) %>% 
-
-  group_by(gearcat_new, REGIME, MONTH, Area) %>%
-  dplyr::summarize(
-    nTrips = length(unique(IDNUM)),
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  # dplyr::select(-starts_with("gearcat_new")) %>%
-  # dplyr::select(Year, InsideREV, InsideLANDED, npermits, gearcat_new_CONF) %>%
-    ungroup() %>%
-  group_by(gearcat_new, REGIME, MONTH,Area) %>%
-  dplyr::summarize(
-    Revenue = sum(InsideREV, na.rm = T),
-    Pounds = sum(InsideLANDED, na.rm = T),
-    npermits = sum(npermits, na.rm = T),
-    ntrips = sum(nTrips, na.rm = T)) %>% 
-  dplyr::rename("Gear_Type"= gearcat_new) 
-
-
-
-################################################################
-#### Create Dataframe of ALL QTYKEPT and REVENUE, aggregated by REGIME in OTHER months 
-################################################################
-
-# PII fixed for all areas; aggregated at the REGIME level (2010-2014 and 2015-2019)
-piiselect_gear_codes3 <- subset(select_gear_codes, !is.na(gearcat_new)) %>%
-  mutate(REGIME = ifelse(Year <= 2014, 1, 2)) %>%
-  # dplyr::select(gearcat_new, Year, InsideREV, InsideLANDED, PERMIT, Area ) %>%
-  dplyr::select(gearcat_new, REGIME, MONTH, InsideREV, InsideLANDED, PERMIT, Area, DEALNUM, IDNUM) %>% # for dealers
-  filter(Area != "Other") %>% 
-  filter(MONTH  <9 | MONTH>11) %>% 
-
-  group_by(gearcat_new, REGIME, Area) %>%
-  dplyr::summarize(
-    nTrips = length(unique(IDNUM)),
-    InsideREV = sum(InsideREV, na.rm = T),
-    InsideLANDED = sum(InsideLANDED, na.rm = T),
-    npermits = length(unique(PERMIT)),
-    ndealers = length(unique(DEALNUM))
-    ) %>%
-  ungroup() %>%
-  group_by(gearcat_new, REGIME, Area) %>%
-  dplyr::summarize(
-    Revenue_OM = sum(InsideREV, na.rm = T),
-    Pounds_OM = sum(InsideLANDED, na.rm = T),
-    npermits_OM = sum(npermits, na.rm = T),
-    ntrips_OM = sum(nTrips, na.rm = T)) %>% 
-  dplyr::rename("Gear_Type"= gearcat_new) 
-
-areaname<-unique(piiselect_gear_codes$Area)
-
-# expand allarea by 4 and fillin Regime
-allactive<-data.frame(Area=areaname) %>% 
-  tidyr::crossing(allactive) 
-
-
-
-
-colnames(piiselect_gear_codes)
-colnames(allactive)
-# expand piiselect_gear_codes3 3 and fillin MONTHS
-
-select_months<-unique(piiselect_gear_codes$MONTH)
-piiselect_gear_codes3<-data.frame(MONTH=select_months) %>% 
-  tidyr::crossing(piiselect_gear_codes3) 
-
-colnames(piiselect_gear_codes3)
-
-
-final_table<-base::merge(piiselect_gear_codes,piiselect_gear_codes3, by=c("Gear_Type", "REGIME", "MONTH", "Area"),all=TRUE)
-
-final_table<-base::merge(final_table,allactive, by=c("Gear_Type", "REGIME", "MONTH","Area"),all=TRUE)
-
-
-final_table[is.na(final_table)] <- 0
-
-final_table$insidePounds_over_totalSM<-final_table$Pounds/(final_table$Pounds_SM)
-final_table$insidePounds_over_totalOM<-final_table$Pounds/(final_table$Pounds+final_table$Pounds_OM)
-
-final_table$insideR_over_totalSM<-final_table$Revenue/(final_table$Revenue_SM)
-final_table$insideR_over_totalOM<-final_table$Revenue/(final_table$Revenue+final_table$Revenue_OM)
-
-
-write.csv(final_table, file=file.path(root.table.path,paste0("table_update",todaysdate,".csv")), row.names=FALSE)
-#Have to save this somewhere
-
-
-  
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -4734,38 +2625,6 @@ if (seperate_tables_by_year) {
 }
     
 
-  
-#   for (yr in sort(as.numeric(unique(allsppnm_table$Year)), decreasing = TRUE))  { #cycle through years
-#     # cat(paste0("*", yr, "*", "  ", "\n\n"),"  ") # display year of area data
-#     allsppnm_table_yr <- allsppnm_table %>% 
-#       filter(yr == Year) %>% 
-#       dplyr::select(-Year) %>%
-#       arrange(desc(`Revenue as % of Total`)) %>% 
-#       top_n(., n=10, wt=`Revenue as % of Total`) %>% 
-#       mutate(Species = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(Species), perl=TRUE)) %>% 
-#       mutate(Area = gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", Area)), perl=TRUE)) %>% 
-#       mutate(`Revenue as % of Total` = comma_format(trim = TRUE, accuracy = 0.01)(as.numeric(`Revenue as % of Total`))) %>% 
-#       mutate(`Landings as % of Total` = comma_format(trim = TRUE, accuracy = 0.01)(as.numeric(`Landings as % of Total`))) %>% 
-#       mutate(`DAS as % of Total` = comma_format(trim = TRUE, accuracy = 0.01)(as.numeric(`DAS as % of Total`)))
-#       
-#     # uncomment below if alphabetical sorting is require(package)
-#     # allsppnm_table <- allsppnm_table %>% arrange(Species, .by_group = TRUE)
-#     # make Species names lowercase and areas proper case
-#     # allsppnm_table$Species <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(allsppnm_table$Species), perl=TRUE)
-#     # allsppnm_table$Area <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", allsppnm_table$Area)), perl=TRUE)
-#     # ##### allsppnm_table <- rbind(allsppnm_table, c("**Total**", colSums(allsppnm_table[,4]), colSums(allsppnm_table[,4])))
-#     # allsppnm_table$`Revenue as % of Total` <- comma_format(trim = TRUE, accuracy = 0.01)(as.numeric(allsppnm_table$`Revenue as % of Total`))
-#     # allsppnm_table$`Landings as % of Total` <- comma_format(trim = TRUE, accuracy = 0.01)(as.numeric(allsppnm_table$`Landings as % of Total`))
-#     # allsppnm_table$`DAS as % of Total` <- comma_format(trim = TRUE, accuracy = 0.01)(as.numeric(allsppnm_table$`DAS as % of Total`))
-#     cat("\n\n")
-#     allsppnm_table_yr <- allsppnm_table_yr %>% dplyr::select(Species, `Revenue as % of Total`, `Landings as % of Total`, `DAS as % of Total`)
-#     
-#     print(kable(allsppnm_table_yr, caption = paste0('Percentages of Total, Revenue, Landings, and Days-at-Sea for Species of Interest, ', broadz, ', ', yr), align=c('l', 'l', 'l', 'l')))
-#   cat("\n\n")
-#   }
-#   # print(kable(allsppnm_table, caption = paste0('Percentages of Total, Revenue, Landings, and Days-at-Sea for Species of Interest, ', broadz), align=c('l', 'l', 'l', 'l', 'l')))
-#   cat("\n\n")
-# }
 
   } # end - create effort section
   
