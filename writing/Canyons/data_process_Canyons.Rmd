@@ -486,9 +486,69 @@ VTR_REC <- VTR_REC %>% # fix data
 ```
 
 
+ <!----  The query_CFDBS chunk landings at the species level, then merges it to a modified species-fmp table. --->
+
+```{r pull_cfdbs }
+try(odbcClose(CONN))
+
+  CONN <- RODBC::odbcConnect(dsn=oracle_server, uid=oracle_username, pwd=oracle_password, believeNRows=FALSE)
+
+  # query missing data from Oracle (should take about 2.5 minutes on VPN) and will join in next code block  
+  ptm.TOTAL = Sys.time()
+  E_Y <- 2021
+  QUERY_RESULT<-list()
+  listcounter<-1
+  for(i in START.YEAR:E_Y) {
+    ptm.TOT = Sys.time()
+    print(i)
+
+    CURRENT.QUERY = paste("SELECT YEAR, NESPP3, sum(spplndlb) as LANDINGS, sum(sppvalue) as VALUE from CFDBS.CFDERS",i," group by year, nespp3;", sep="") 
+  
+    QUERY_RESULT[[listcounter]] = sqlQuery(CONN, CURRENT.QUERY, stringsAsFactors=FALSE)  ### seems to be a problem with having a "paste" on both sides...
+    listcounter<-listcounter+1
+  }
+  
+#odbcClose(CONN) # garbage collection
+
+QUERY_RESULT<-rbindlist(QUERY_RESULT)
+  
+  # Bin to FMP  
+ SPECIES_CUSTOM<-offshoreWind::SPECIES %>%
+        mutate(FMP=replace(FMP, NESPP3 %in% c("727","711"), "American Lobster")) %>% #Lob + Jonah separate 
+        mutate(FMP=replace(FMP, NESPP3 %in% c("710"), "Red Crab")) %>%
+        mutate(FMP=replace(FMP, NESPP3 %in% c("444","446"), "Tilefish"))
+
+        #Red Crab
+ #Join to the FMP table. 
+ CFDBS_FMP <- QUERY_RESULT %>%   
+    mutate(NESPP3 = replace_na(NESPP3, 0)) %>%
+    mutate(NESPP3=sprintf("%03.0f",NESPP3)) %>%
+        left_join(x = ., y = SPECIES_CUSTOM, by = "NESPP3") %>%
+        ungroup() %>%   
+        group_by(FMP, YEAR) %>%
+        summarise(LANDINGS=sum(LANDINGS/1000000, na.rm = T),
+                  VALUE=sum(VALUE/1000000, na.rm = T)) %>%
+        filter(!FMP %in% c("SERO FMP","Highly Migratory Species","No Federal FMP", "ASMFC FMP",NA))
+  # NEED to convert REV to character and hit (c) it for red crab when I make the table.
+saveRDS(CFDBS_FMP, file= file.path(output_revenue, paste0("CFDBS_FMP.Rds")) ) 
+  
+  
+```
+
+
+
+
+
+
+
+
+
  <!----  The query_gearids_permits_if_requested chunk gets up to date gearid or permit level info. --->
 ```{r query_gearids_permits_if_requested, results='hide', eval = eval_query_gearids_permits}  
- 
+ try(odbcClose(CONN))
+
+  CONN <- RODBC::odbcConnect(dsn=oracle_server, uid=oracle_username, pwd=oracle_password, believeNRows=FALSE)
+  
   # ##### option 2 - Query from database 
   # CONN = odbcConnect(dsn="sole",uid="dcorvi",pwd="pw",believeNRows=FALSE)
   # query missing data from Oracle (should take about 2.5 minutes on VPN) and will join in next code block  
