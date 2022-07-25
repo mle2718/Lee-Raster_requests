@@ -1,10 +1,17 @@
+```{r tidy_up_species, include=FALSE, eval=TRUE}
 
+SPECIES_CUSTOM<-offshoreWind::SPECIES %>%
+        mutate(FMP=replace(FMP, NESPP3 %in% c("727","711"), "American Lobster")) %>% #Lob + Jonah separate 
+        mutate(FMP=replace(FMP, NESPP3 %in% c("710"), "Red Crab"))%>% #Red Crab
+        mutate(FMP=replace(FMP, NESPP3 %in% c("444","446"), "Tilefish")) %>%
+        mutate(FMP=replace(FMP, NESPP3 %in% c("748"), "No Federal FMP"))
+```
 
 
  <!---- 
  The Get_Deflators chunk loads the GDPDEF series from the internet so you can deflate. 
  --->
-```{r Get_Deflators, include=FALSE, eval=T}
+```{r Get_Deflators, include=FALSE, eval=TRUE}
 get_GDP_deflator <- function(time_period = "year", federal_reserve_url = "https://fred.stlouisfed.org/data/GDPDEF.txt"){
   message("Pulling GDP deflator data from Federal Reserve API ..")
   # pull from online text file at https://fred.stlouisfed.org/data/GDPDEF.txt
@@ -512,11 +519,6 @@ try(odbcClose(CONN))
 
 QUERY_RESULT<-rbindlist(QUERY_RESULT)
   
-  # Bin to FMP  
- SPECIES_CUSTOM<-offshoreWind::SPECIES %>%
-        mutate(FMP=replace(FMP, NESPP3 %in% c("727","711"), "American Lobster")) %>% #Lob + Jonah separate 
-        mutate(FMP=replace(FMP, NESPP3 %in% c("710"), "Red Crab")) %>%
-        mutate(FMP=replace(FMP, NESPP3 %in% c("444","446"), "Tilefish"))
 
         #Red Crab
  #Join to the FMP table. 
@@ -530,6 +532,21 @@ QUERY_RESULT<-rbindlist(QUERY_RESULT)
                   VALUE=sum(VALUE/1000000, na.rm = T)) %>%
         filter(!FMP %in% c("SERO FMP","Highly Migratory Species","No Federal FMP", "ASMFC FMP",NA))
   # NEED to convert REV to character and hit (c) it for red crab when I make the table.
+ 
+  # DEflate 
+
+assign("base_year_index",GDPDEF_annual[GDPDEF_annual$Year == "2020","GDPDEF"])
+base_year_index <- as.numeric(base_year_index)       
+GDPDEF_annual <- GDPDEF_annual %>%
+            mutate(GDPDEF = GDPDEF/base_year_index)
+ 
+ 
+ CFDBS_FMP <- CFDBS_FMP %>%
+    left_join(GDPDEF_annual, by = c("YEAR"= "Year")) %>%
+   mutate(nominal_revenue=VALUE,
+          VALUE=VALUE/GDPDEF) %>%
+   filter(FMP !="Surclam, Ocean Quahog")
+  
 saveRDS(CFDBS_FMP, file= file.path(output_revenue, paste0("CFDBS_FMP.Rds")) ) 
   
   
@@ -684,9 +701,7 @@ if (noaa_data_source == "dmis2022" && query_dmis_table == FALSE) {
     if (noaa_data_source %in% c("dmis","dmis2022")) { #new dmis table with imgids
       ptm.DMIS = Sys.time()
       #MODIFY SPECIES
-      SPECIES_CUSTOM<-offshoreWind::SPECIES %>%
-        mutate(FMP=replace(FMP, NESPP3 %in% c("727","711"), "American Lobster")) %>% #Lob + Jonah separate 
-        mutate(FMP=replace(FMP, NESPP3 %in% c("710"), "Red Crab")) #Red Crab
+  
 
 
     APSD_DMIS <- as_tibble(
@@ -1122,8 +1137,6 @@ if (length(proj_area_name) == 1) {
 } else {
   saveRDS(FIN, file= file.path(output_fin, paste0("FIN_", proj_area_name[1],"_and_other_areas", ".Rds"))) # save revenuefile if more than 1 area and any other edge cases
 }
-
-
 
 
 
