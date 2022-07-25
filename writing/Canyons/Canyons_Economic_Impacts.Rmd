@@ -4,11 +4,10 @@ author: "Min-Yang Lee"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
   pdf_document:
-    keep_tex: TRUE
+    keep_tex: yes
     fig_caption: yes
-    number_sections:  TRUE
-header-includes:
-    - \usepackage{setspace}\doublespacing
+    number_sections: yes
+header-includes: \usepackage{setspace}\doublespacing
 urlcolor: blue
 editor_options:
   chunk_output_type: console
@@ -157,8 +156,8 @@ dmis2022_infile<-here("raw_data","APSD_WIND_TEST_2022_07_07.Rds")
 
 START.YEAR<-2012
 #START.YEAR<-2018
-END.YEAR<-2016
-
+END.YEAR<-2020
+deflate_by <- "year"
 numyear <- offshoreWind::proper(offshoreWind::numbers2words(as.integer(length(START.YEAR:END.YEAR))))
 
 numeric_years<-as.integer(length(START.YEAR:END.YEAR))
@@ -231,7 +230,7 @@ numclasses <- 5
 
 
 # Data_Process_Switch<-TRUE will extract and process data. This takes a while, so set to FALSE after you run the first time.
-Data_Process_Switch<-TRUE
+Data_Process_Switch<-FALSE
 query_dmis_table = FALSE # query old or new dmis table from Oracle? True = yes, False = use flatfile in data/
 query_rec_table = FALSE # query rec table from Oracle? True = yes, False = use flatfile in data/
 query_permits = TRUE # query permit ids for vtr from Oracle? True = yes, False = use flatfile in data/
@@ -352,6 +351,7 @@ source(here("R_code","raster_manifest.R"))
 ```
 
 
+
  <!---- 
  The LOAD_EXISTING_GIS_DATA loads shapefiles into memory and does some minimal processing on them. 
  --->
@@ -419,30 +419,38 @@ Canyons_new = spTransform(Canyons_new, CRS=PROJ.USE)
 
 
  <!---- 
- The data_process_Canyons knits a child RMD.  There are a bunch of 'options' that were originally set in these chunks. I've moved most of them to the global_options and set_switches sections. but not all of them. And some are hard coded.
-
-Neither of these works prop properly though
-
-```{r child=here("writing","Canyons", "data_process_Canyons.Rmd")}
-```
-
-
-```{r, child='data_process_Canyons.Rmd'}
-```
-
+ The data_process_Canyons knits a child RMD.  There are a bunch of 'options' that were originally set in these chunks. I've moved most of them to the global_options and set_switches sections. but not all of them. And some are hard coded. 
+ 
+ This only works when you knit, not when you run a chunk.
  --->
- 
- 
 
- 
+```{r child=here("writing","Canyons", "data_process_Canyons.Rmd"), eval=Data_Process_Switch}
+```
+
+
+
 
 ```{r load_REVENUEFILE_and_FIN, eval = !Data_Process_Switch} 
+START.YEAR<-2012
+#START.YEAR<-2018
+END.YEAR<-2016
+
 REVENUEFILE<-readRDS(file.path(output_revenue, paste0("REVENUEFILE_", proj_area_name, ".Rds")))
 REVENUEFILE <-REVENUEFILE %>%
   filter(Year>=START.YEAR & Year<=END.YEAR) %>%
   mutate(Area = if_else(Area=="Northeast_Canyons_And_Seamounts", "Northeast_Canyons_And_Seamounts_Addition", Area))
 
 FIN<-readRDS(file.path(output_fin, paste0("FIN_", proj_area_name, ".Rds"))) 
+
+
+SCOQ_swap <-FIN %>%
+  filter(FMP=="Surfclam, Ocean Quahog") %>%
+  rename(YEAR=Year) %>%
+  group_by(FMP, YEAR) %>%
+  summarise(VALUE=sum(REVENUE/1000000,na.rm = T),
+            LANDINGS=sum(QTYKEPT/1000000,na.rm = T),
+            nominal_revenue=sum(nominal_revenue/1000000,na.rm = T))
+  
 FIN <-FIN %>%
   filter(Year>=START.YEAR & Year<=END.YEAR)
 
@@ -450,7 +458,14 @@ FIN <-FIN %>%
 # as.factor(unique(REVENUEFILE$Area)[!unique(REVENUEFILE$Area) %in% "Other" ])
 allZones <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", allZones1), perl=TRUE) # make name pretty
 
-CFDBS_FMP<-readRDS(CFDBS_FMP, file= file.path(output_revenue, paste0("CFDBS_FMP.Rds")) ) 
+CFDBS_FMP<-readRDS(file= file.path(output_revenue, paste0("CFDBS_FMP.Rds")))
+# Drop the clam/quahog from CFDBS_FMP and substitute in the totals from FIN
+
+CFDBS_FMP <-CFDBS_FMP %>%
+  filter(FMP!="Surfclam, Ocean Quahog")%>%
+  bind_rows(SCOQ_swap)
+
+
 
 
 
@@ -459,7 +474,7 @@ CFDBS_FMP<-readRDS(CFDBS_FMP, file= file.path(output_revenue, paste0("CFDBS_FMP.
 <!-- Note: The HULLNUM/VESID variable is not used in this dataset to fill in the permit number for clam trips (which don't have a permit attached to the record in the SFCLAM database). This will introduce NA's to the data. -->
 
  <!----  The create_map_of_lease_area chunk makes a map of the area of the ocean --->
-```{r create_map_of_lease_area, eval = T,fig.cap="\\label{fig:map_NCSMNM} Northeast Canyons and Seamounts National Monument Addition.  This area is part of the NCSMNM that does not lie inside the Georgest Bank Deep Sea Coral Area."} 
+```{r create_map_of_lease_area, eval = T,fig.cap="\\label{fig:map_NCSMNM} Northeast Canyons and Seamounts National Monument Addition.  This area is part of the NCSMNM that does not lie inside the Georges Bank Deep Sea Coral Area."} 
   crs <- CRS("+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0")
 
 if (any(proj_area_name %in% formatted_lease_area_table$proj_area_file_name)) {
@@ -621,7 +636,6 @@ The goal of this amendment is to protect the geological, ecological, and biologi
 
 See Section 3.0 for a description of the fisheries.
 
-
 #### Statement of the Problem (Market Failure)
 
 Habitat inside NCSMNM is important for a  host of species including managed species such as cod and American anglerfish, and unmanaged species including a host of both vertebrate and invertebrate animals.  Deep-sea corals and other fauna in the NCSMNM are slow growing and some species have limited dispersal capability. These features, combined with the branching and sometimes brittle structure of some taxa, make them vulnerable to mechanical disturbance, such as from fishing gear.  
@@ -676,7 +690,7 @@ The economic activity in the NCSMNM can be characterized as series of flows. Eac
 Understanding the NPV of economic activity in NCSMNM arising from any policy is then an exercise of discounting and summing the flows of benefits (accruing from extractive and non-extractive uses) over time. An economically optimal policy with respect to commercial fishing in the NCSMNM balances the additional benefits of fishing (consumer and producer surpluses) against the costs of fishing (the actual costs, plus damages to the habitat).  
 
 #### Description of selected alternative
-The proposed action would close the entirety of the NCSMNM to commercial fishing. Commercial fishing for red crab and American Lobster can continue  until September 15, 2023.  82% of the NCSMNM lies within the Georges Bank Deep-Sea Coral Protection Area, where commercial fishing, except with red crab pots, is currently prohibited.  
+The proposed action would close the entirety of the NCSMNM to commercial fishing. Commercial fishing for red crab and American Lobster can continue until September 15, 2023.  82% of the NCSMNM lies within the Georges Bank Deep-Sea Coral Protection Area, where commercial fishing, except with red crab pots, is currently prohibited.  
 
 Therefore, the economic analysis focuses on the 18% of NCSMNM that is not contained with the Georges Bank Deep-Sea Coral Protection Area.  The analysis also focuses on the long-run and examines the continued closure of the NCSMNM to all gears, including Red Crab and Lobster.
 
@@ -684,10 +698,31 @@ Therefore, the economic analysis focuses on the 18% of NCSMNM that is not contai
 
 #### Baseline Description
 
-A reasonable baseline is the *status quo* condition.  Fishing, with certain exceptions, inside the Georges Bank Deep-Sea Coral Protection Area continues to be prohibited as a result of actions undertaken by the  NEFMC.  82% of the NCSMNM is contained within the Georges Bank Deep-Sea Coral Protection Area and fishing with all gear except red crab pot/trap gear continues to be prohibited in this area in the baseline.  
+A reasonable baseline is the *status quo* condition.  82% of the NCSMNM is contained within the Georges Bank Deep-Sea Coral Protection Area and fishing with all gear except red crab pot/trap gear continues to be prohibited in this area in the baseline.  Table \ref{tab:baseline_revenues} summarizes the average landings and revenue (real 2020 USD), by FMP, constructed from the NMFS dealer databases.  We note that this table *includes* fishing activity that occurred in the Georges Bank Deep-Sea Coral Protection Area.   
 
 Under the *status quo* baseline, commercial fishing in the 18% of the NCSMNM not contained within the Georges Bank Deep-Sea Coral Protection Area is prohibited by Presidential Proclamation under the Antiquities Act.  As seen from historical record, the types of allowed activities in the area can easily be changed by presidential proclamation to include or not include commercial fishing.  It is therefore reasonable to infer that a future administration may prefer to allow commercial fishing in the NCSMNM.
- 
+
+
+```{r baseline_revenues}
+
+
+Baseline_rev <- CFDBS_FMP %>%
+  filter(YEAR>=2017 & YEAR<=2020) %>%
+  group_by(FMP) %>%
+  summarise(Landings=mean(LANDINGS),
+            Value=mean(VALUE)) %>%
+  arrange(desc(Value)) %>%
+  mutate(Value = as.character(round(Value,2)) ) %>%
+  mutate(Value = ifelse(FMP == "Red Crab", '(C)',Value))%>%
+  mutate(Value = ifelse(FMP == "Tilefish", '(C)',Value)) 
+
+kbl(Baseline_rev, booktabs=T,  align=c("l",rep('r',times=2)), digits=2, caption = "2017-2020 Average Annual Landings (millions of pounds) and Value (Millions of Real 2020 USD)")  %>%
+      kable_styling(full_width = F) %>% 
+      row_spec(0,bold=TRUE)  %>%
+      row_spec(nrow(Baseline_rev),bold=T)
+```
+
+
 Under the baseline, there is a probability that fishing would be allowed in NCSMNM at some unknown point in the future.  We refrain from an assessment of when this might occur or the probability that it would occur. However, if commercial fishing is allowed inside NCSMNM, the extractive and non-extractive flow of benefits will change.  Additional benefits would accrue to both the fishing industry and consumers of seafood.  These would be positively related to the amount of fishing that would occur in 18% of NCSMNM.  We are unable to estimate producer or consumer surplus measures associated with fishing inside this area; we therefore characterize the revenue from fishing that would occur inside this area. We use commercial fishing data from  `r START.YEAR` - `r END.YEAR` time due to the changing status of fishing after `r END.YEAR`. All dollars and are normalized to 2021 real values, using the GDP Deflator.
 
 If commercial fishing is allowed, the stock of habitat inside NCSMNM would decline in proportion to the increase in fishing effort.  Different types of gear have different effects on the bottom.  Both the decrease in quality of the habitat stock and the economic costs that decline in quality are difficult to quantify.  In Oceanographer, Gilbert, and Lydonia canyons, the hard canyon walls provide habitats for sponges, corals, and other invertebrates that filter food from the water to flourish, and for larger species including squid, octopus, skates, flounders, and crabs. Major oceanographic features, such as currents, temperature gradients, eddies, and fronts, occur on a large scale and influence the distribution patterns of such highly migratory oceanic species as tuna, billfish, and sharks. They provide feeding grounds for these and many other marine species.  
@@ -696,7 +731,6 @@ Therefore,we therefore characterize the fishing effort, in terms of landings, th
 
 
 ```{r fmp_top_five_dynamic_text, eval = T} 
-
 # sort(names(REVENUEFILE))
 
 # unique(REVENUEFILE$FMP)
@@ -986,7 +1020,7 @@ ggsave(filename = file.path(output_ftopfmp, paste0("Top5FMPLand_",substr(broadzo
 rm(lp) # garbage collection - free up memory
 ```
 
-```{r top_fmp_revenue_figure, eval = top_fmp_section, fig.cap="\\label{fig:top_fmp_revenue_figure} Revenue (Real 2021USD)  by FMP, Northeast Canyons and Seamounts Addition Area."} 
+```{r top_fmp_revenue_figure, eval = top_fmp_section, fig.cap="\\label{fig:top_fmp_revenue_figure} Revenue (Real 2020USD)  by FMP, Northeast Canyons and Seamounts Addition Area."} 
 
 
 #######################################################################################
@@ -1113,7 +1147,7 @@ other_rev<-Other$"All Year Revenue"
 # set dynamic varible names (cant use paste0 in rename in tidyverse)
 names(allyrrev_table)[names(allyrrev_table) == "All Year Revenue"] <- paste0(numyear, " Year Average Revenue")
 
-kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=1)), caption = "2012-2016 Average Value (Real 2021 USD)")  %>%
+kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=1)), caption = "2012-2016 Average Value (Real 2020 USD)")  %>%
       kable_styling(full_width = F) %>% 
       row_spec(0,bold=TRUE)  %>%
       row_spec(nrow(allyrland_table),bold=T)
