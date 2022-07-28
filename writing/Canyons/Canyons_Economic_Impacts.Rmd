@@ -531,7 +531,7 @@ CFDBS_FMP <-CFDBS_FMP %>%
   filter(FMP!="Surfclam, Ocean Quahog")%>%
   bind_rows(SCOQ_swap) %>%
   left_join(Omnibus, by=c("FMP"="FMP", "YEAR"="Year")) %>%
-  filter(YEAR>=2012 & YEAR<=2017) %>%
+  filter(YEAR>=2012 & YEAR<=2020) %>%
   mutate(inOMNIBUSLand = ifelse(is.na(inOMNIBUSLand), 0, inOMNIBUSLand),
          inOMNIBUSRev = ifelse(is.na(inOMNIBUSRev), 0, inOMNIBUSRev),
          )
@@ -774,6 +774,7 @@ A reasonable baseline is the *status quo* condition.  82% of the NCSMNM is conta
 ```{r baseline_revenues}
 Baseline_rev <- CFDBS_FMP %>%
   filter(YEAR>=2017 & YEAR<=2020) %>%
+  filter(FMP!="Atlantic Salmon") %>%
   group_by(FMP) %>%
   summarise(Landings=mean(LANDINGS),
             Value=mean(VALUE),
