@@ -3,6 +3,8 @@ title: "Canyons and Seamounts Economic Impacts"
 author: "Min-Yang Lee"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
+  html_document:
+    df_print: paged
   pdf_document:
     keep_tex: yes
     fig_caption: yes
@@ -149,9 +151,15 @@ PROJ.USE = CRS('+proj=aea +lat_1=28 +lat_2=42 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0
 
 #############################################################################
 
-#name and locatin of dmis2022 flatfile.
+#name and location of dmis2022 flatfile.
 
 dmis2022_infile<-here("raw_data","APSD_WIND_TEST_2022_07_07.Rds")
+
+
+
+#name and location of Habitat_OA2_file
+
+AREA.PATH = file.path(network_location,"work5","socialsci","Geret_Rasters","Data","NEFMC_Coral","Trip_level_data")
 
 
 START.YEAR<-2012
@@ -324,6 +332,64 @@ source(here("R_code","project_logistics","R_credentials_RODBC.R"))
       end = END.YEAR)
 ```
 
+```{r tidy_up_species, include=FALSE, eval=TRUE}
+
+SPECIES_CUSTOM<-offshoreWind::SPECIES %>%
+        mutate(FMP=replace(FMP, NESPP3 %in% c("727","711"), "American Lobster")) %>% #Lob + Jonah together 
+        mutate(FMP=replace(FMP, NESPP3 %in% c("710"), "Red Crab"))%>% #Red Crab
+        mutate(FMP=replace(FMP, NESPP3 %in% c("444","446"), "Tilefish")) %>%
+        mutate(FMP=replace(FMP, NESPP3 %in% c("748"), "No Federal FMP"))
+```
+
+
+
+
+```{r readin_Coral_REVENUEFILE}
+load(file.path(AREA.PATH,"DeepSeaCoralData_Aug_2018.Rdata"))
+REVENUEFILE$REVENUE <- REVENUEFILE$REVENUE*as.numeric(244.4)/as.numeric(233.6)
+REVENUEFILE$InsideREV <- REVENUEFILE$InsideREV*as.numeric(244.4)/as.numeric(233.6) 
+  
+FMP_DATA <- REVENUEFILE[which(REVENUEFILE$BROADZONE%in%c("600 m Min","Mt Desert Rock Option 2","Outer Schoodic Ridge","Maximum Area for Conservation")),]
+FMP_DATA$Drop <- 1
+FMP_DATA$Drop[FMP_DATA$GEARCODE%in%c('DRC','DRM','DRO','DRS','DRU','DSC','OHS','OTB','OTC','OTF','OTO','OTR','OTS','OTT','PTB','SED','SES',"DTC","DTS","TTS","MIX","OTH","SED","SES",'GNS',"LLB","GNR","GNO",'PTL',"PTF","PTC","PTS","PTW","PTH","PTO","TRP","PTE","PTX") & FMP_DATA$BROADZONE=="Maximum Area for Conservation"] <- 0
+
+FMP_DATA$Drop[FMP_DATA$BROADZONE=="600 m Min" & FMP_DATA$GEARCODE%in%c('DRC','DRM','DRO','DRS','DRU','DSC','OHS','OTB','OTC','OTF','OTO','OTR', 'OTS','OTT','PTB','SED','SES',"DTC","DTS","TTS","MIX","OTH","SED","SES",'GNS', "LLB","GNR","GNO",'PTL',"PTF","PTC","PTS","PTW","PTH","PTO","TRP","PTE","PTX")] <- 0
+  FMP_DATA$Drop[FMP_DATA$BROADZONE=="600 m Min" & FMP_DATA$NESPP3==710] <- 1
+  FMP_DATA$Drop[FMP_DATA$BROADZONE%in%c("Mt Desert Rock Option 2","Outer Schoodic Ridge") & 
+                 FMP_DATA$GEARCODE%in%c('DRC','DRM','DRO','DRS','DRU','DSC','OHS','OTB','OTC','OTF','OTO','OTR',
+                                         'OTS','OTT','PTB','SED','SES',"DTC","DTS","TTS","MIX","OTH")] <- 0
+  FMP_DATA <- FMP_DATA[which(FMP_DATA$Drop==0),]
+  FMP_DATA$BROADZONE[FMP_DATA$BROADZONE%in%c("600 m Min","Mt Desert Rock Option 2","Outer Schoodic Ridge")] <- "Preferred Alternative"
+
+Omnibus <- FMP_DATA %>%
+  filter(BROADZONE=="Preferred Alternative") %>%
+  select(-c(FMP,SPPNM)) %>%
+  mutate(NESPP3 = replace_na(NESPP3, 0)) %>%
+  mutate(NESPP3=sprintf("%03.0f",NESPP3)) %>%
+  mutate(Year=as.numeric(Year)) %>%
+  left_join(x = ., y = SPECIES_CUSTOM, by = "NESPP3") %>%
+  group_by(Year, FMP) %>%
+  summarise(
+    inOMNIBUSRev=sum(InsideREV/1000000,na.rm = T),
+    inOMNIBUSLand=sum(InsideLANDED/1000000,na.rm = T)) 
+
+# There is no Red Crab in the Omnibus data in the Preferred Alternative. I was surprised about this, but I double checked and this is legit
+# 
+# Omnibus_T <- FMP_DATA %>%
+#   filter(BROADZONE=="Preferred Alternative") %>%
+#   select(-c(FMP,SPPNM)) %>%
+#   mutate(NESPP3 = replace_na(NESPP3, 0)) %>%
+#   mutate(NESPP3=sprintf("%03.0f",NESPP3)) %>%
+#   mutate(Year=as.numeric(Year)) %>%
+#   left_join(x = ., y = SPECIES_CUSTOM, by = "NESPP3")
+
+
+
+
+rm(FMP_DATA)
+rm(REVENUEFILE)
+
+```
 
  <!---- 
  The construct raster manifest chunk constructs a dataframe of raster ids. Only run this once per project and it's only needed if you have to make maps..
@@ -463,8 +529,13 @@ CFDBS_FMP<-readRDS(file= file.path(output_revenue, paste0("CFDBS_FMP.Rds")))
 
 CFDBS_FMP <-CFDBS_FMP %>%
   filter(FMP!="Surfclam, Ocean Quahog")%>%
-  bind_rows(SCOQ_swap)
-
+  bind_rows(SCOQ_swap) %>%
+  left_join(Omnibus, by=c("FMP"="FMP", "YEAR"="Year")) %>%
+  filter(YEAR>=2012 & YEAR<=2017) %>%
+  mutate(inOMNIBUSLand = ifelse(is.na(inOMNIBUSLand), 0, inOMNIBUSLand),
+         inOMNIBUSRev = ifelse(is.na(inOMNIBUSRev), 0, inOMNIBUSRev),
+         )
+# Not red crab, is this a parsing problem with species names?
 
 
 
@@ -698,29 +769,43 @@ Therefore, the economic analysis focuses on the 18% of NCSMNM that is not contai
 
 #### Baseline Description
 
-A reasonable baseline is the *status quo* condition.  82% of the NCSMNM is contained within the Georges Bank Deep-Sea Coral Protection Area and fishing with all gear except red crab pot/trap gear continues to be prohibited in this area in the baseline.  Table \ref{tab:baseline_revenues} summarizes the average landings and revenue (real 2020 USD), by FMP, constructed from the NMFS dealer databases.  We note that this table *includes* fishing activity that occurred in the Georges Bank Deep-Sea Coral Protection Area.   
-
-Under the *status quo* baseline, commercial fishing in the 18% of the NCSMNM not contained within the Georges Bank Deep-Sea Coral Protection Area is prohibited by Presidential Proclamation under the Antiquities Act.  As seen from historical record, the types of allowed activities in the area can easily be changed by presidential proclamation to include or not include commercial fishing.  It is therefore reasonable to infer that a future administration may prefer to allow commercial fishing in the NCSMNM.
-
+A reasonable baseline is the *status quo* condition.  82% of the NCSMNM is contained within the Georges Bank Deep-Sea Coral Protection Area and fishing with all gear except red crab pot/trap gear continues to be prohibited in this area in the baseline.  Table \ref{tab:baseline_revenues} summarizes the average landings and revenue (real 2020 USD), by FMP, constructed from the NMFS dealer databases from 2017 to 2020.  We note that this table *includes* fishing activity that occurred inside the Georges Bank Deep-Sea Coral Protection Area. That fishing activity is described in Figure \ref{fig:GB_Deep_Sea}.  
 
 ```{r baseline_revenues}
-
-
 Baseline_rev <- CFDBS_FMP %>%
   filter(YEAR>=2017 & YEAR<=2020) %>%
   group_by(FMP) %>%
   summarise(Landings=mean(LANDINGS),
-            Value=mean(VALUE)) %>%
+            Value=mean(VALUE),
+            GB=mean(inOMNIBUSRev)) %>%
   arrange(desc(Value)) %>%
   mutate(Value = as.character(round(Value,2)) ) %>%
+  mutate(GB = as.character(round(GB,2)) ) %>%
   mutate(Value = ifelse(FMP == "Red Crab", '(C)',Value))%>%
-  mutate(Value = ifelse(FMP == "Tilefish", '(C)',Value)) 
+  mutate(Value = ifelse(FMP == "Tilefish", '(C)',Value)) %>%
+  mutate(GB = ifelse(FMP == "Tilefish", '(C)',GB)) %>%
+  mutate(GB = ifelse(FMP == "Red Crab", '(C)',GB))
 
-kbl(Baseline_rev, booktabs=T,  align=c("l",rep('r',times=2)), digits=2, caption = "2017-2020 Average Annual Landings (millions of pounds) and Value (Millions of Real 2020 USD)")  %>%
+
+
+
+# Here is where we want to join things to the new REVENUEFILE
+
+kbl(Baseline_rev, booktabs=T,  align=c("l",rep('r',times=3)), digits=2, caption = "2017-2020 Average Annual Landings (millions of pounds) and Value (Millions of Real 2020 USD) and Revenue derived from the GB Deep Sea Coral Protection Area")  %>%
       kable_styling(full_width = F) %>% 
       row_spec(0,bold=TRUE)  %>%
       row_spec(nrow(Baseline_rev),bold=T)
 ```
+
+
+
+
+
+```{r GB_DSC, out.width = "40%", fig.show='hold',fig.align="center", fig.cap="\\label{fig:GB_Deep_Sea Coral} Revenue in real 2020USD (left) and percentage terms (right) , by FMP, derived from the Georges Bank Deep-Sea Coral Protection Area"}
+knitr::include_graphics(here("writing","Canyons",c("revenue_GBCoral.png","pct_revenue_GBCoral.png")))
+```
+
+Under the *status quo* baseline, commercial fishing in the 18% of the NCSMNM not contained within the Georges Bank Deep-Sea Coral Protection Area is prohibited by Presidential Proclamation under the Antiquities Act.  As seen from historical record, the types of allowed activities in the area can easily be changed by presidential proclamation to include or not include commercial fishing.  It is therefore reasonable to infer that a future administration may prefer to allow commercial fishing in the NCSMNM.
 
 
 Under the baseline, there is a probability that fishing would be allowed in NCSMNM at some unknown point in the future.  We refrain from an assessment of when this might occur or the probability that it would occur. However, if commercial fishing is allowed inside NCSMNM, the extractive and non-extractive flow of benefits will change.  Additional benefits would accrue to both the fishing industry and consumers of seafood.  These would be positively related to the amount of fishing that would occur in 18% of NCSMNM.  We are unable to estimate producer or consumer surplus measures associated with fishing inside this area; we therefore characterize the revenue from fishing that would occur inside this area. We use commercial fishing data from  `r START.YEAR` - `r END.YEAR` time due to the changing status of fishing after `r END.YEAR`. All dollars and are normalized to 2021 real values, using the GDP Deflator.
@@ -1194,7 +1279,7 @@ kbl(Total_REV, booktabs=T,  align=c("l",rep('r',times=2)), caption = "2012-2016 
 ```
 
 
-Figures \ref{fig:landings_gear_plot} to \ref{fig:revenue_gear_plot} describe landings from `r START.YEAR` to `r END.YEAR` that occurred within the NCSMNM boundary addition. They are disaggregated by gear to provide some insight into the possible declines in the stock of habitat in the area if fishing resumed.  We note that American Lobster and Red Crab fisheries would not be impacted unil September 15, 2023.  Annual lobster landings hav averaged `r lobster_lbs` pounds per year and \$`r lobster_rev ` per year over the `r START.YEAR` to `r END.YEAR` time period.  Red crab landings cannot be reported due to data confidentiality reasons and are aggregated into the "Other NER" and have averaged less than `r other_lbs` pounds per year and \$`r other_rev` per year over this time period.
+Figures \ref{fig:landings_gear_plot} to \ref{fig:revenue_gear_plot} describe landings from `r START.YEAR` to `r END.YEAR` that occurred within the NCSMNM boundary addition. They are disaggregated by gear to provide some insight into the possible declines in the stock of habitat in the area if fishing resumed.  We note that American Lobster and Red Crab fisheries would not be impacted unil September 15, 2023.  Annual lobster landings hav averaged `r lobster_lbs` pounds per year and \$ `r lobster_rev ` per year over the `r START.YEAR` to `r END.YEAR` time period.  Red crab landings cannot be reported due to data confidentiality reasons and are aggregated into the "Other NER" and have averaged less than `r other_lbs` pounds per year and \$`r other_rev` per year over this time period.
 
 Some types of gear (say midwater trawl or handline) has minimal effects on the ocean bottom compared to others (say Trawl or Dredge). Tables \ref{tab:landings_table_by_gear} and \ref{tab:revenue_table_by_gear} present totals over this five year time period.
 
@@ -1655,7 +1740,7 @@ kbl(DRE_2012_2016Firms, digits=0,booktabs=T,  align=c("l",rep('r',times=6)), cap
       row_spec(0,bold=TRUE) 
 ```
 
-Tables \ref{tab:Firm_average_in_Area}  and \ref{tab:AnyInside} suggest that the additional NCSMNM area are not often used by fishing firms.  Compliance costs, measured as foregone revenue from this area, are expected to be low.  On average, firms derived less than 1\% of annual fishing revenue from this area, and typically substantially less than this.  
+Tables \ref{tab:Firm_average_in_Area}  and \ref{tab:AnyInside} suggest that the NCSMNM addition area are not highly used by fishing firms.  Every year, approximately 100 fishing firms derive some fishing revenue from the NCSMNM addition area (Table \ref{tab:AnyInside}).  Compliance costs, measured as foregone revenue from this area, are expected to be low.  On average, firms derived less than 1\% of annual fishing revenue from this area, and typically substantially less than this.  
 
 ```{r AnyInside}
 
@@ -1687,7 +1772,7 @@ kbl(DRE_2012_2016InsideOnly, digits=0,booktabs=T,  align=c("l",rep('r',times=6))
 
 #### Percentage of Revenue by Firm
 
-We also plot the percentage of each firm's total commercial fishing revenue derived from inside the NCSMNM addition area (Figure \ref{fig:percent_of_revenue_by_firm}).  Only firms with revenue from the area are included in the plots; these plots are companions to Table \ref{tab:AnyInside}.  The box-whisker plots indicate, even after excluding firms that do not use the NCSMNM addtion area,  firms derive a small proportion of their total revenue from the NCSMNM addition area. 
+We also plot the percentage of each firm's total commercial fishing revenue derived from inside the NCSMNM addition area (Figure \ref{fig:percent_of_revenue_by_firm}).  Only firms with revenue from the area are included in the plots; these plots are companions to Table \ref{tab:AnyInside}.  The area inside the boxes of indicate capture the 25$^th$-75$^th$ percentiles, indicating that,  after excluding firms that do not use the NCSMNM addition area, most firms derive a small proportion of their total revenue from the NCSMNM addition area. 
 
 ```{r percent_of_revenue_by_firm, results='asis', eval = T, fig.cap="\\label{fig:percent_of_revenue_by_firm} Annual Firm Revenue Percentage Boxplots,, only firms with some activity inside NCSMNM Addition"}  
 
@@ -1710,8 +1795,22 @@ PermitInsideRev <- aff_key %>%
     AllREV = sum(REVENUE,na.rm=T)) %>%
     filter(Area != "Other") %>%
     filter(InsideREV >0 ) %>%
-  mutate(Percent=100*InsideREV/AllREV) %>%
+  mutate(Percent=100*InsideREV/AllREV,
+         Year=as.character(Year)) %>%
   arrange(desc(InsideREV))
+
+Totals <- PermitInsideRev %>%
+  group_by(affiliate_id, Size, Area) %>%
+  summarize(InsideREV = sum(InsideREV, na.rm = T),
+    InsideLANDED = sum(InsideLANDED, na.rm = T),
+    AllREV = sum(AllREV,na.rm=T)) %>%
+    filter(Area != "Other") %>%
+  mutate(Percent=100*InsideREV/AllREV,
+         Year="Total") %>%
+  arrange(desc(InsideREV))
+
+PermitInsideRev<- rbind(PermitInsideRev,Totals)
+
 
 # iterate over all areas and produce box plot
 for (z in unique(PermitInsideRev$Area)) {
@@ -1729,7 +1828,8 @@ for (z in unique(PermitInsideRev$Area)) {
   scale_fill_viridis(discrete=TRUE) +
   coord_flip() +
   labs(x = NULL,
-       y = "Percent Total Revenue by Firm") +
+       y = "Percent Total Revenue inside the NCSMNM Addition by Firm") +
+   scale_y_continuous(breaks=seq(0,80,10))+
   theme_bw() +
   # theme_classic() + # remove panel background and gridlines
   # theme(text=element_text(family="serif"),
@@ -1748,16 +1848,20 @@ rm(boxplot)
 
 ```
 
+Similarly, box-whisker plots of firm's total commercial fishing revenue derived from inside the NCSMNM addition area (Figure \ref{fig:revenue_by_firm}) illustrate that most of the firms earn less than \$30,000 in gross receipts from the NCSMNM addition.
 
-```{r revenue_by_firm, results='asis', eval = T, fig.cap="\\label{fig:revenue_by_firm} Annual Firm Revenue Boxplots, only firms with some activity inside NCSMNM Addition"}  
+```{r revenue_by_firm, eval = T, fig.cap="\\label{fig:revenue_by_firm} Annual Firm Revenue Boxplots, only firms with some activity inside NCSMNM Addition"}  
 
+num_years<-length(unique(PermitInsideRev[PermitInsideRev$Year!="Total",]$Year))
 
 # iterate over all areas and produce box plot
 for (z in unique(PermitInsideRev$Area)) {
   Permitboxplot <- PermitInsideRev %>%
     filter(Area==z) %>%
-    mutate(InsideREV=InsideREV/1000)
-  broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", z)), perl=TRUE)
+    mutate(InsideREV=InsideREV/1000) %>%
+    mutate(Year = ifelse(Year == "Total", "Average", Year)) %>%
+    mutate(InsideREV = ifelse(Year=="Average",  InsideREV/num_years, InsideREV))
+    broadz <- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(gsub("_"," ", z)), perl=TRUE)
 ### ggplot version ###
   # par(family = "serif")
   # windowsFonts(Times=windowsFont("Times New Roman"))
@@ -1768,9 +1872,9 @@ for (z in unique(PermitInsideRev$Area)) {
   stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..)) +
   scale_fill_viridis(discrete=TRUE) +
   coord_flip() +
-  scale_y_continuous(limits=c(0,100))+
+  scale_y_continuous(limits=c(0,100), breaks=seq(0,100,10))+
   labs(x = NULL,
-       y = "Revenue ('000s) by Firm") +
+       y = "Annual Revenue ('000s) Inside the NCSMNM Addition by Firm") +
   theme_bw() +
   # theme_classic() + # remove panel background and gridlines
   # theme(text=element_text(family="serif"),
@@ -1785,17 +1889,50 @@ print(boxplot)
 ggsave(file.path(output_ffirm, paste0("boxplot_firmsRev_",z,".png")), plot = boxplot)
 rm(boxplot)
 }
+```
+Figure \ref{fig:REV_PCT_scatter} plots average annual revenue against the percentage of revenue derived from the NCSMNM addition.  This illustrates that a few firms use the NCSMNM addition for more than 50\% of their gross revenues, but these firms have relatively low gross receipts.  A few firms derive more than $75,000 of revenue from NCSMNM, but these firms earn a low proportion of their total revenue from this area.    
+
+```{r Rev_and_Pct_scatter,eval = T, fig.cap="\\label{fig:REV_PCT_scatter} Scatterplot of Percentage of Firm Revenue Inside NCSMNM against Annual Firm Revenue Inside NCSMNM, only firms with some activity inside NCSMNM Addition"}
+
+num_years<-length(unique(PermitInsideRev[PermitInsideRev$Year!="Total",]$Year))
 
 
+PCT_Scatter<-PermitInsideRev %>%
+  filter(Year=="Total") %>%
+  mutate(
+    InsideREV=InsideREV/num_years/1000,
+    InsideLANDED=InsideLANDED/num_years,
+    AllREV=AllREV/num_years
+  )
 
+ggplot(PCT_Scatter, aes(x=InsideREV, y=Percent)) +
+  geom_point() + 
+  labs(x = "Average Annual ('000s) Revenue Inside NCSMNM",
+       y = "Percentage of Firm Revenue Inside NCSMNM")+
+  scale_y_continuous(limits=c(0,100), breaks=seq(0,100,25))
+  scale_x_continuous(limits=c(0,150), breaks=seq(0,150,25))
 
+rm(PCT_Scatter)
+```
 
+```{r count_years, fig.cap="\\label{fig:nyears} Histogram of the number of years that firms were active in the NCSMNM addition. "}
+count_years<-PermitInsideRev %>%
+  filter(Year!="Total") %>%
+  group_by(affiliate_id,Size) %>%
+  count()
+distinct_firms<-length(unique(count_years$affiliate_id))
+
+#table(count_years$n)
+
+ggplot(count_years, aes(x=n)) + 
+  geom_histogram( binwidth=1, fill="gray", color="gray", alpha=0.9) +
+  labs(x = "Number of Years (2012-2016) fished in NCSMNM Addition" ,
+       y = "Number of Firms Active in NCSMNM Addition")  
 
 
 ```
 
-
-
+The NCSMNM addition was not used by every firm in every year. Table \ref{tab:AnyInside} shows that 80-110 firms used the NCSMNM addition each year.  There were `r distinct_firms` that fished in the NCSMNM addition at any point over the 2012-2016 time period.  Many firms did not fish in this area in all years.  Figure \ref{fig:nyears} is a histogram of the number of years each firm fished inside the NCSMNM addition. Almost 60 firms fished there for just 1 year while 33 fished there in all five years.
 
 #### Compliance Requirements
 A description of the projected reporting, record-keeping, and other compliance requirements of the proposed rule, including an estimate of the classes of small entities which will be subject to the requirements of the report or record.
