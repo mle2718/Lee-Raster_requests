@@ -126,10 +126,6 @@ raw_data_path = file.path(offshoreWindpath,"data-raw")
 area_adjective = "" # The adjective that can be assigned before the word 'area' in the dynamic text - default is blank (e.g. "..most revenue from the areas over the five year analysis.." )
 # area_adjective = "call"
 
-base_year = 2021 # base year for GDP deflator - Maximum = 2020, Minimum = 1947  - max(GDPDEF_quarterly$Year)
-base_quarter = "" # base quarter for GDP deflator e.g. "Q1", "Q2" etc. Maximum = Q1 of 2020, Minimum = Q1 of 1947 - leave blank to query by year
-# base_year <- readline(prompt=paste0("What is the base year for adjusting nominal values to real values? \n\n")) #  *** vignettes dont seem to have the ability to prompt the user
-
 # vtr or dmis data source
 #noaa_data_source = "dmis" # dmis data with clam data join - from 04-06-2020 DMIS table
 noaa_data_source = "dmis2022" # dmis data with clam data join - from 07-07-2022 DMIS query. 
@@ -535,7 +531,7 @@ QUERY_RESULT<-rbindlist(QUERY_RESULT)
  
   # DEflate 
 
-assign("base_year_index",GDPDEF_annual[GDPDEF_annual$Year == "2020","GDPDEF"])
+assign("base_year_index",GDPDEF_annual[GDPDEF_annual$Year == base_year,"GDPDEF"])
 base_year_index <- as.numeric(base_year_index)       
 GDPDEF_annual <- GDPDEF_annual %>%
             mutate(GDPDEF = GDPDEF/base_year_index)
