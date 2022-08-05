@@ -165,7 +165,12 @@ AREA.PATH = file.path(network_location,"work5","socialsci","Geret_Rasters","Data
 START.YEAR<-2012
 #START.YEAR<-2018
 END.YEAR<-2020
+
 deflate_by <- "year"
+#base year and/or quarter for GDP Deflator
+base_year = 2020 # base year for GDP deflator - Maximum = 2020, Minimum = 1947  - max(GDPDEF_quarterly$Year)
+base_quarter = "" # base quarter for GDP deflator e.g. "Q1", "Q2" etc. Maximum = Q1 of 2020, Minimum = Q1 of 1947 - leave blank to query by year
+
 numyear <- offshoreWind::proper(offshoreWind::numbers2words(as.integer(length(START.YEAR:END.YEAR))))
 
 numeric_years<-as.integer(length(START.YEAR:END.YEAR))
@@ -239,6 +244,7 @@ numclasses <- 5
 
 # Data_Process_Switch<-TRUE will extract and process data. This takes a while, so set to FALSE after you run the first time.
 Data_Process_Switch<-FALSE
+Data_Process_Switch<-TRUE
 query_dmis_table = FALSE # query old or new dmis table from Oracle? True = yes, False = use flatfile in data/
 query_rec_table = FALSE # query rec table from Oracle? True = yes, False = use flatfile in data/
 query_permits = TRUE # query permit ids for vtr from Oracle? True = yes, False = use flatfile in data/
@@ -311,6 +317,8 @@ paletteName3 <- "Paired" # which color palette to use for plots - check all avai
 maxUniqueColors <- brewer.pal.info[paletteName1, "maxcolors"]
 
 
+
+
 source(here("R_code","project_logistics","R_credentials_RODBC.R"))
 
 ```	
@@ -332,7 +340,7 @@ source(here("R_code","project_logistics","R_credentials_RODBC.R"))
       end = END.YEAR)
 ```
 
-```{r tidy_up_species, include=FALSE, eval=TRUE}
+```{r tidy_up_speciesA, include=FALSE, eval=TRUE}
 
 SPECIES_CUSTOM<-offshoreWind::SPECIES %>%
         mutate(FMP=replace(FMP, NESPP3 %in% c("727","711"), "American Lobster")) %>% #Lob + Jonah together 
@@ -496,7 +504,7 @@ Canyons_new = spTransform(Canyons_new, CRS=PROJ.USE)
 
 
 
-```{r load_REVENUEFILE_and_FIN, eval = !Data_Process_Switch} 
+```{r load_REVENUEFILE_and_FIN, eval = TRUE} 
 START.YEAR<-2012
 #START.YEAR<-2018
 END.YEAR<-2016
@@ -670,112 +678,28 @@ plot(lease_area_map)
 
 ```
 
-
+# Summary (do not include)
 GARFO is leading an omnibus amendment to the Fishery Management Plans of the MA and NE Fishery Management Councils.  The proposed action would  affect vessels that hold a permit for any of the thirteen fishery management plans or for the American Lobster and Jonah Crab fisheries.  The proposed action would implement regulations to prohibit commercial fishing activities in the Northeast Canyons and Seamounts National Monument; Red crab and American lobster commercial fishing would be exempt until September 15, 2023. Recreational fishing activities are not affected.  
 
-Commerical fishing, except for red crab and lobster, in the Northeast Canyons and Seamounts National Monument (NCSMNM) was prohibited from September 15, 2016 to June 5, 2020 (Presidential Proclamation 9496).  From June 6, 2020 to October 8, 2021, commercial fishing was allowed (Proclamation 10049).   The entirety of the NCSMNM is currently closed to fishing by Presidential Proclamation 10287 under the Antiquities Act.  82% of the NCSMNM is within the Georges Bank Deep Sea Coral Area through the NEFMC's Habitat Omnibus Amendment 2 and commercial fishing except red crab has been closed since July 26, 2021.  18% of the NCSMNM is not contained in the Georges Bank Deep Sea Coral Area is the focus of the economic analysis and is referred to as the "NCSMNM Addition" (Figure \ref{fig:map_NCSMNM}). 
+Commercial fishing, except for red crab and lobster, in the Northeast Canyons and Seamounts National Monument (NCSMNM) was prohibited from September 15, 2016 to June 5, 2020 (Presidential Proclamation 9496).  From June 6, 2020 to October 8, 2021, commercial fishing was allowed (Proclamation 10049).   The entirety of the NCSMNM is currently closed to fishing by Presidential Proclamation 10287 under the Antiquities Act.  82% of the NCSMNM is within the Georges Bank Deep Sea Coral Area through the NEFMC's Habitat Omnibus Amendment 2 and commercial fishing except red crab has been closed since July 26, 2021.  18% of the NCSMNM is not contained in the Georges Bank Deep Sea Coral Area is the focus of the economic analysis and is referred to as the "NCSMNM Addition" (Figure \ref{fig:map_NCSMNM}). 
 
 
 
 
-\setcounter{section}{5}
-\setcounter{subsection}{11}
-## Regulatory Impact Analysis and Initial Regulatory Flexibility Analysis
 
-This document provides the analysis and conclusions to address the requirements of Executive Order 12866 and the Regulatory Flexibility Act (RFA).  NMFS requires the preparation of a Regulatory Impact Analysis (RIA) for all regulatory actions that either implement or significantly amend a Fishery Management Plan (FMP). The RIA provides a comprehensive review of the changes in net economic benefits to society associated with proposed regulatory actions. This analysis reviews the problems and policy objectives prompting the regulatory proposals and evaluates the alternatives presented as a solution. This analysis ensures that we systematically and comprehensively consider all available alternatives so public welfare can be enhanced in the most efficient and cost-effective way. This RIA addresses multiple items in the regulatory philosophy and principles of Executive Order (EO) 12866. 
+\setcounter{section}{4}
+\setcounter{subsection}{1}
+## Economic and Social Effects
 
-An Initial Regulatory Flexibility Analysis (IRFA; section NNNN) has been prepared to further evaluate the economic impacts of the various alternatives presented in this document on regulated small business entities. 
+### Economic Effects
 
-### Regulatory Impact Analysis (E.O. 12866)
-
-The purpose of Executive Order 12866 (E.O. 12866, 58 FR 51735, October 4, 1993) is to enhance planning and coordination with respect to new and existing regulations. This E.O. requires the Office of Management and Budget (OMB) to review regulatory programs that are considered to be “significant.” E.O. 12866 requires a review of proposed regulations to determine whether or not the expected effects would be significant, where a significant action is any regulatory action that may:
-
-*  Have an annual effect on the economy of $100 million or more, or adversely affect in a material way the economy, a sector of the economy, productivity, jobs, the environment, public health or safety, or State, local, or tribal governments or communities;
-*  Create a serious inconsistency or otherwise interfere with an action taken or planned by another agency;
-*  Materially alter the budgetary impact of entitlements, grants, user fees, or loan programs or the rights and obligations of recipients thereof; or
-*  Raise novel legal or policy issues arising out of legal mandates, the President’s priorities, or the principles set for the Executive Order.
- 
-In deciding whether and how to regulate, agencies should assess all costs and benefits of available regulatory alternatives. Costs and benefits shall be understood to include both quantifiable measures (to the fullest extent that these can be usefully estimated) and qualitative measures of costs and benefits that are difficult to quantify, but nevertheless essential to consider. 
-
-Fishing in NCSMNM (with limited temporary exceptions) is currently prohibited by presidential proclamation and the propsed action does not change the currently allowed fishing areas.  Instead, the proposed action codifies Proclamation 9496, as amended by Proclamation 10287, into regulation. These proclamations directed the Secretaries of Commerce and Interior to promulgate regulations necessary for the proper care and management of the Monument. 
-The costs, relative to the *status quo*, are opportunity cost of fishing adjusted by the likelihood that future administrations would reopen the NCSMNM to commercial fishing. Fishing in much of the NCSMNM (with limited exceptions) is currently also prohibited through the Georges Bank Deep-Sea Coral Protection Area, which was implemented through the NEFMC's Omnibus Deep-Sea Coral Amendment (86 FR 33553).
-
-The benefits, relative to the *status quo*, are derived from an increased level of certainty in improving the condition of corals, sponges, and other deep-sea fauna in NCSMNM and indirectly improving the production of other species which rely on this habitat. Due to data limitations we were not able to quantify the costs or benefits of this rule associated with habitat conservation. Still, we believe that the overall impact of the proposed rule falls well short of the annual \$100 million threshold for a significant economic action because Vessel Trip Reports indicate that fishing vessels would derive \$1-2 million in annual gross revenue from the NCSMNM Addition. 
-
-
-#### Management Goals and Objectives
-
-The goal of this amendment is to protect the geological, ecological, and biological resources within the Monument.  This amendment is needed to codify Proclamation 9496, as amended by Proclamation 10287, which directs the Secretaries to promulgate regulations necessary for the proper care and management of the Monument.
-
-#### Description of the Fishery and other affected entitites
-
-See Section 3.0 for a description of the fisheries.
-
-#### Statement of the Problem (Market Failure){#market_failure}
-
-Habitat inside NCSMNM is important for a  host of species including managed species such as cod and American anglerfish, and unmanaged species including a host of both vertebrate and invertebrate animals.  Deep-sea corals and other fauna in the NCSMNM are slow growing and some species have limited dispersal capability. These features, combined with the branching and sometimes brittle structure of some taxa, make them vulnerable to mechanical disturbance, such as from fishing gear.  
-
-NCSMNM can provide economic benefits in through extractive and non-extractive means.  First, high-quality habitat can increase the stocks of recreationally and commercially exploited species.  It may also agglomerate stocks of exploited species, making them easier to harvest.  These benefits are do not necessarily cease when commercial fishing inside the areas is prohibited: mature fish may move outside the protected area or produce offspring that move outside the protected area [@Holland1996] These are extractive uses.  Second, the NCSMNM can be associated with existence and bequest uses: the people of the nation may derive value  from knowing the NCSMNM exists and knowing that it will continue to exist for future generations.  
-
-As a nonmarket good subject to open access, habitat is a good that economists expect to be overutilized without management intervention.  This is because the impacts of fishing on both the structure and function of deep-sea coral is not factored into an individual fisherman’s decision-making. In the absence of corrective policies, the actions of individual profit-maximizing firms imposes an externality; excess degradation of habitat above and beyond a socially optimal level. For quickly regenerating substrate and habitat, like featureless sandy bottoms with high flow of water, the practical effects of these externalities are likely minimal.  However, for habitat in the NCSMNM, the effects may be larger.  First, the functional degradation of habitat can impact the productivity of managed and unmanaged species that rely on the flora and fauna in the area. These impacts can lead to decreases in the future flow of benefits derived from recreationally and commercially exploited species. Second, these impacts can decrease the flow of nonuse values such as bequest and existence value of both the habitat and environment, including things like deep sea coral and other species.  
-
-A cause and effect relationship between high-quality habitat and fish populations is hard to determine, and our understanding of relationships between deep-sea corals and fishes is situational and inferential (e.g., Baker et al. 2012), particularly in seamount habitats [@auster2007linking]. At the Gulf of Maine sites, economically important species were observed in coral habitats, including Acadian redfish (juveniles, adults, and pregnant females), haddock, pollock, cusk, monkfish, cod, silver hake, Atlantic herring, spiny dogfish, squid, and lobster. There is recent evidence that deep-sea corals play an important role in the early life history of some fish and shark species, providing nursery grounds and habitat for protection, reproduction, and feeding [@costello2005role] . @baillon2012deep collected sea pens as trawl bycatch during routine multispecies research surveys and found convincing evidence that several species of sea pens, including *Pennatula aculeata*, *Anthoptilum grandiflorum*, *Pennatula grandis*, and *Halipteris finmarchica*, are being directly utilized as shelter by fish larvae, mainly by those of the redfish (*Sebastes* spp.), one species of which is federally managed under the Northeast Large Mesh Multispecies FMP.  Thus, though the co-occurrence of deep sea coral and species of interest is suggestive, the extent to which productivity of managed and unmanaged species relies on these deep sea coral is highly uncertain, even in qualitative terms. 
-
-The economic values of conservation associated with deep sea corals, including bequest and existence values, are not as well studied as those associated with tropical corals (Figure \ref{fig:coral_lit_table}). What value estimates exist focuses on two countries, Norway and Ireland, and in reality rely on only 3 datasets.  Of note is that a number of these studies indicate heterogeneity in both individual’s willingness to pay for conservation across both countries and allowable activities within conservation areas. For example, @armstrong2019willingness indicates that the Irish public are less willing than Norwegians to trade extractive activities such as fishing and mining off against conservation, the latter weighing pure existence value higher than the former. Additionally, @lariviere2014value, @aanesen2015willingness; @sandorf2016valuing, and @sandorf2017disentangling all rely on the same data, with the differences in estimates depending on how the heterogeneity in preferences across individuals is modeled.  A similar heterogeneity between both individuals and allowable uses has been identified in the Northeast, with some individuals even reporting negative willingness to pay for increases in the size of marine protected areas [@wallmo2008estimating]. The literature search highlights that estimated values are sensitive to the context in which they are solicited, and should account for heterogeneity in preferences for conservation. The values presented in Table 1 thus do not provide great clarity in informing estimation of the value of deep sea coral conservation undertaken within this action. As such, we discuss the benefits of deep sea coral conservation in a qualitative manner. The preferred alternatives designate three coral zones along the shelf break out to the EEZ boundary and in the inshore Gulf of Maine. Given the location of these zones and the specific fishing restriction measures associated with them, they are not likely to cause substantial displacement of fishing effort and therefore substantial increased conservation in the near term, but they will prevent expansion of fishing into these areas in the future. Thus, the benefits of this action derived from conservation of deep-sea corals and managed resources which utilize coral habitats are expected to be positive in direction, but slight in magnitude, and accrue over a long time horizon.
-```{r clt, out.width = "500px", fig.align="center", fig.cap="\\label{fig:coral_lit_table}Valuation studies for Deep Sea Corals"}
-knitr::include_graphics(here("writing","Canyons","Coral_lit_table.png"))
-```
-
-<!---
-\addtocounter{figure}{-1}
-\addtocounter{table}{1}
-
-I've added a table as a figure. So I'm going to add 1 to the Tables Counter and subtract 1 from the figures counter. This is a hack and a half that only works because it's the first table or figure. Otherwise I'd have to setcounter by hand. 
-
-Citation	Country	Empirical Approach	Average Willingness to Pay Estimated
-Armstrong, C.W., Aanesen, M., van Rensburg, T.M. and Sandorf, E.D., 2019. Willingness to pay to protect cold water corals. Conservation Biology, 33(6), pp.1329-1337.	Norway, Ireland	Choice Experiments	NKra 341 ($39)/year/household for 2,500km2 increase
-NKra 424 ($48)/year/household for 7,500km2 increase
-NKra 880 ($100)/year/household if important fish habitat
-Glenn, H., Wattage, P., Mardle, S., Van Rensburg, T., Grehan, A. and Foley, N., 2010. Marine protected areas — substantiating their worth. Marine Policy, 34(3), pp.421-430.	Ireland	Choice Experiments	Insignificant estimates
-Sandorf, E.D., Aanesen, M. and Navrud, S., 2016. Valuing unfamiliar and complex environmental goods: A comparison of valuation workshops and internet panel surveys with videos. Ecological Economics, 129, pp.50-61.	Norway	Choice Experiments	NKra 230-284 ($33-$41)/year/household for 7,500km2 increase
-NKra 457-1,009 ($66-$146)/year/household if important fish habitat
-LaRiviere, J., Czajkowski, M., Hanley, N., Aanesen, M., Falk-Petersen, J. and Tinch, D., 2014. The value of familiarity: effects of knowledge and objective signals on willingness to pay for a public good. Journal of Environmental Economics and Management, 68(2), pp.376-389.	Norway	Choice Experiments	NKra 573 ($87)/year/household for 7,555km2 increaseb
-NKra 1007-2036 ($153-$310)/year/household if important fish habitat
-NKra 232-256 ($35-$39)/year/household add. to protect from fishing
-NKra 257 ($39)/year/household add. to protect from oil drillingb
-Aanesen, M., Armstrong, C., Czajkowski, M., Falk-Petersen, J., Hanley, N. and Navrud, S., 2015. Willingness to pay for unfamiliar public goods: preserving cold-water coral in Norway. Ecological Economics, 112, pp.53-67.	Norway	Choice Experiments	EURa 53 ($63)/year/household for 2,555km2 increase
-EURa 67 ($80)/year/household for 7,555km2 increase
-EURa 166 ($197)/year/household if important fish habitat
-EURa 39 ($46)/year/household add. to protect from fishing
-EURa 16 ($19)/year/household add. to protect from oil drilling
-Sandorf, E.D., Campbell, D. and Hanley, N., 2017. Disentangling the influence of knowledge on attribute non-attendance. Journal of choice modelling, 24, pp.36-50.	Norway	Choice Experiments	NKra 314 ($45)/year/household for 2,500km2 increasec
-NKra 370 ($53)/year/household for 7,500km2 increasec
-NKra 292 ($42)/year/household if important fish habitatc 
-NKra -9 (-$1)/year/household add. to protect from fishingc
-NKra -37 (-$5)/year/household add. to protect from oil drillingc
-Wattage, P., Glenn, H., Mardle, S., Van Rensburg, T., Grehan, A. and Foley, N., 2011. Economic value of conserving deep-sea corals in Irish waters: a choice experiment study on marine protected areas. Fisheries Research, 107(1-3), pp.59-67.	Ireland	Choice Experiments	Insignificant estimates
---->
-
-<!-- #### A Net Present Value Framework  -->
-
-<!-- A Net Present Value (NPV) framework provides a useful theoretical framework for understanding the economic effects of potential changes in human activity allowed inside NCSMNM; however, a full NPV analysis is not performed.  -->
-
-<!-- The seafloor in NCSMNM can be thought of as a capital asset.  Beyond it's value derived from the unique ecological resources that are subject to scientific interest, the seafloor ecoystem services, including habitat for species that are commercially valuable.  The quality of the capital asset decreases after fishing occurs when bottom-contact from fishing gear damages the unique oceanographic formations or destroys marine life.  Because fauna in the area (like deep-sea coral and sponges) grow, the habitat can slowly regenerate after these events. However, coral and sponges are fragile, slow-growing, and relatively immobile, so even small amounts of intermittent activity may have long-lasting, negative impacts on the stock of habitat in NCSMNM.   -->
-
-<!-- The economic activity in the NCSMNM can be characterized as series of flows. Each year, benefits accrue to the nation.  These benefits may take the form of producer and consumer surplus derived from extractive uses, like commercial fishing.  Benefits may also accrue though non-extractive uses through bequest and existence values described in the previous section. -->
-
-<!-- Understanding the NPV of economic activity in NCSMNM arising from any policy is then an exercise of discounting and summing the flows of benefits (accruing from extractive and non-extractive uses) over time. An economically optimal policy with respect to commercial fishing in the NCSMNM balances the additional benefits of fishing (consumer and producer surpluses) against the costs of fishing (the actual costs, plus damages to the habitat).   -->
-
-#### Description of selected alternative
 The proposed action would close the entirety of the NCSMNM to commercial fishing. Commercial fishing for red crab and American Lobster can continue until September 15, 2023.  82% of the NCSMNM lies within the Georges Bank Deep-Sea Coral Protection Area, where commercial fishing, except with red crab pots, is currently prohibited.  
 
-Therefore, the economic analysis focuses on the 18% of NCSMNM that is not contained with the Georges Bank Deep-Sea Coral Protection Area.  The analysis also focuses on the long-run and examines the continued closure of the NCSMNM to all gears, including Red Crab and Lobster.
-
-#### Other Alternatives 
+Therefore, the economic analysis focuses on the 18% of NCSMNM that is not contained with the Georges Bank Deep-Sea Coral Protection Area.  The analysis also focuses on the long-run and examines the continued closure of the NCSMNM to all gears, including Red Crab and Lobster gear.
 
 #### Baseline Description
 
-A reasonable baseline is the *status quo* condition.  82% of the NCSMNM is contained within the Georges Bank Deep-Sea Coral Protection Area and fishing with all gear except red crab pot/trap gear continues to be prohibited in this area in the baseline.  Landings and revenue from recent years are typically used to construct the baseline economic conditions.  However, the Georges Bank Deep-Sea Coral Area has been closed since July 26, 2021, so data from recent years (when fishing *was* permitted the Deep-Sea Coral area) may not give the full picture of the baseline conditions.  Therefore, in addition to summarizing the average landings and revenue (real 2020 USD), by FMP in Table \ref{tab:baseline_revenues}, the average revenue (real 2020 USD) derived from  the Georges Bank Deep-Sea Coral Protection Area is also presented in column four of Table \ref{tab:baseline_revenues}.  It is likely that a large proportion of the fishing activity in column four has been migrated to a different part of the ocean.  
+A reasonable baseline is the *status quo* condition.  82% of the NCSMNM is contained within the Georges Bank Deep-Sea Coral Protection Area and fishing with all gear except red crab pot/trap gear continues to be prohibited in this area in the baseline.  Landings and revenue from recent years are used to describe the baseline economic conditions.  The Georges Bank Deep-Sea Coral Area has been closed since July 26, 2021, so data from recent years (when fishing *was* permitted the Deep-Sea Coral area) may not give the full picture of the baseline conditions.  Therefore, in addition to summarizing the average landings and revenue (real 2020 USD), by FMP in Table \ref{tab:baseline_revenues}, the average revenue (real 2020 USD) derived from  the Georges Bank Deep-Sea Coral Protection Area is also presented in column four of Table \ref{tab:baseline_revenues}.  It is likely that a large proportion of the fishing activity in column four has migrated to a different part of the ocean.  All dollars and are normalized to 2020 real values, using the GDP Deflator.
 ```{r baseline_revenues}
 Baseline_rev <- CFDBS_FMP %>%
   filter(YEAR>=2017 & YEAR<=2020) %>%
@@ -805,24 +729,30 @@ kbl(Baseline_rev, booktabs=T,  align=c("l",rep('r',times=4)), digits=3, caption 
 knitr::include_graphics(here("writing","Canyons",c("revenue_GBCoral.png","pct_revenue_GBCoral.png")))
 ```
 
-Under the *status quo* baseline, the coral, sponges, and other underwater fauna are to be protected from impacts of commercial fishing gear by Presidential Proclamation under the Antiquities Act.  These unique attributes continue to provide non-use economic benefits (bequest and existence) as described in the statement of market failure (Section \ref{market_failure}); however, there are no benefits related to direct commercial extraction inside NCSMNM.  Finally, the habitat itself will regenerate and likely improve in quality after the cessation of fishing activities, increasing some non-use economic benefits in the future. 
 
-Under the *status quo* baseline, commercial fishing in the 18% of the NCSMNM not contained within the Georges Bank Deep-Sea Coral Protection Area is prohibited by Presidential Proclamation under the Antiquities Act.  As seen from historical record, the types of allowed activities in the area can easily be changed by presidential proclamation to include or not include commercial fishing.  It is therefore reasonable to infer that a future administration may prefer to allow commercial fishing in the NCSMNM. 
+Under the *status quo* baseline, commercial fishing in the 18% of the NCSMNM not contained within the Georges Bank Deep-Sea Coral Protection Area is prohibited by Presidential Proclamation under the Antiquities Act.  As seen from historical record, the types of allowed activities in the area can easily be changed by presidential proclamation to include or not include commercial fishing.  It is therefore reasonable to infer that a future administration may prefer to allow commercial fishing in the NCSMNM and consider the this probability in the description of the baseline. 
+
+If commercial fishing is allowed inside NCSMNM, additional benefits would accrue to the fishing industry (and consumers of seafood).  These would be positively related to the amount of fishing that would occur in 18% of NCSMNM.  We are unable to estimate producer surplus measures associated with fishing inside this area; we therefore characterize the revenue from fishing that would occur inside this area. We use commercial fishing data from  `r START.YEAR` - `r END.YEAR` time due to the changing status of fishing after `r END.YEAR`. 
+
+<!---
+Under the *status quo* baseline, the coral, sponges, and other underwater fauna are to be protected from impacts of commercial fishing gear by Presidential Proclamation under the Antiquities Act.  These unique attributes continue to provide non-use economic benefits (bequest and existence) as described in the statement of market failure (Section \ref{market_failure}); however, there are no benefits related to direct commercial extraction inside NCSMNM.  Finally, the habitat itself will regenerate and likely improve in quality after the cessation of fishing activities, increasing some non-use economic benefits in the future. 
 
 If commercial fishing is allowed inside NCSMNM, the extractive and non-extractive flow of benefits will change.  Additional benefits would accrue to both the fishing industry and consumers of seafood.  These would be positively related to the amount of fishing that would occur in 18% of NCSMNM.  We are unable to estimate producer or consumer surplus measures associated with fishing inside this area; we therefore characterize the revenue from fishing that would occur inside this area. We use commercial fishing data from  `r START.YEAR` - `r END.YEAR` time due to the changing status of fishing after `r END.YEAR`. All dollars and are normalized to 2021 real values, using the GDP Deflator.
 
+
 If commercial fishing is allowed, the quality of habitat inside NCSMNM would decline in proportion to the increase in fishing effort.  Different types of gear have different effects on the bottom.  Both the decrease in quality of the habitat stock and the economic costs that decline in quality are difficult to quantify.  In Oceanographer, Gilbert, and Lydonia canyons, the hard canyon walls provide habitats for sponges, corals, and other invertebrates that filter food from the water to flourish, and for larger species including squid, octopus, skates, flounders, and crabs. Major oceanographic features, such as currents, temperature gradients, eddies, and fronts, occur on a large scale and influence the distribution patterns of such highly migratory oceanic species as tuna, billfish, and sharks. They provide feeding grounds for these and many other marine species.  
 
-Therefore, we therefore characterize the fishing effort, in terms of landings, that would occur inside this area. We use commercial fishing data based on vessel trip reports from  `r START.YEAR` - `r END.YEAR` time due to the changing status of fishing after  `r END.YEAR`.  These projected landings and revenues were constructed using the methods described in [@DePiper2014; @Benjamin2018] and were also used in a he similar analysis in support of the NEFMC's Habitat Omnibus Amendment 2 [-@NEFMC_habitat_2016_V6]. In brief, fishing vessels report the location (coordinate) where the majority of their fishing effort was located.  Because fishing activity does not occur at a single point, a model, based on data collected through the observer program is used to account for this by allocating the fishing activity over a more realistic area. The amount of allocated effort that occurs inside the NCSMNM addition over the `r START.YEAR` to `r END.YEAR` period is used to construct projected landings and revenue that would occur if the NCSMNM addition was reopened to commercial fishing.
+Some types of gear (say midwater trawl or handline) has minimal effects on the ocean bottom compared to others (say Trawl or Dredge). Table \ref{tab:revenue_table_by_gear} describes the economic activity, disaggregated by gear, projected to occur inside the NCSMNM addition if reopened. These proved insight into both the effects of fishing effort on the sea bottom and the types of commercial users that may benefit from the opening of the NCSMNM.
+
+--->
+
+We project the fishing effort, in terms of landings, that would occur inside the NCSMNM addition area.  We use commercial fishing data based on vessel trip reports from  `r START.YEAR` - `r END.YEAR` time make this characterization. This time period is selected because the changing status of fishing makes data after `r END.YEAR` less useful for characterizing fishing activity if the NCSMNM were reopened.   These projected landings and revenues were constructed using the methods described in [@DePiper2014; @Benjamin2018] and were also used in a he similar analysis in support of the NEFMC's Habitat Omnibus Amendment 2 [-@NEFMC_habitat_2016_V6]. In brief, fishing vessels report the location (coordinate) where the majority of their fishing effort was located.  Because fishing activity does not occur at a single point, a model, based on data collected through the observer program is used to account for this by allocating the fishing activity over a more realistic area. The amount of allocated effort that occurs inside the NCSMNM addition over the `r START.YEAR` to `r END.YEAR` period is used to construct projected landings and revenue that would occur if the NCSMNM addition was reopened to commercial fishing.
 
 These data *under-represent* fishing activity attributable to the lobster fishery and pot/trap gears because vessel operators that hold a lobster permit and no other federal permit are not required to fill out vessel trip reports.  Of the 113 fishing vessels with an Area 3 lobster permit in 2018, 90 were required to file VTRs because they held other Northeast Region permits.
 
-Table \ref{tab:top_fmp_revenue_table} projects landings and revenue that is likely to occur inside the NCSMNM addition if reopened.   These tables provide insight into likely annual flows of benefits of resuming fishing in the NCSMNM addition and the types of firms to which those benefits would accrue *in the baseline*. Figures \ref{fig:top_fmp_landings_plots} and \ref{fig:top_fmp_revenue_figure}  describe landings and  landings from `r START.YEAR` - `r END.YEAR` that occured within the NCSMNM boundary addition disaggregated by FMP and year.  These provide insight into the likely year-to-year variation of those benefits.
+Table \ref{tab:top_fmp_revenue_table} projects landings and revenue that is likely to occur inside the NCSMNM addition if reopened.   These tables provide insight into likely annual flows of benefits of resuming fishing in the NCSMNM addition and the types of firms to which those benefits would accrue *in the baseline*. Figures \ref{fig:top_fmp_landings_plots} and \ref{fig:top_fmp_revenue_figure}  describe landings and  landings from `r START.YEAR` - `r END.YEAR` that occurred within the NCSMNM boundary addition disaggregated by FMP and year.  These provide insight into the likely year-to-year variation of those benefits.
 
-
-Some types of gear (say midwater trawl or handline) has minimal effects on the ocean bottom compared to others (say Trawl or Dredge). Table \ref{revenue_table_by_gear} describes the economic activity, disaggregated by gear, projected to occur inside the NCSMNM addition if reopened. These proved insight into both the effects of fishing effort on the sea bottom and the types of commercial users that may benefit from the opening of the NCSMNM.
-
-To convert the annual flow of uncertain future economic activity in Tables \ref{fig:top_fmp_landings_plots} and \ref{fig:top_fmp_revenue_figure} into  current values, it is necessary to adjust for both the probability that fishing will occur and when it will occur.  We refrain from an assessment of either of these figures, but note that both factors will reduce the values shown in in Tables \ref{fig:top_fmp_landings_plots} and \ref{tab:revenue_table_by_gear}.
+To convert the annual flow of uncertain future economic activity in Tables \ref{tab:top_fmp_revenue_table} and \ref{tab:revenue_table_by_gear} into  current values, it is necessary to adjust for both the probability that fishing will occur and when it will occur.  We refrain from an assessment of either of these figures, but note that both factors will reduce the values shown in in Tables \ref{tab:top_fmp_revenue_table} and \ref{tab:revenue_table_by_gear}.
 
 
 ```{r fmp_top_five_dynamic_text, eval = T} 
@@ -1154,14 +1084,16 @@ Other<-allyrrev_table %>%
 other_rev<-Other$"All Year Revenue"
 
 
-# set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrrev_table)[names(allyrrev_table) == "All Year Revenue"] <- paste0(numyear, " Average Projected Revenue")
-
 allyrrev_table <-allyrrev_table %>%
   left_join(allyrland_table, by="FMP") %>%
-  relocate(`All Year Revenue`, .after=last(col))
+  relocate(`All Year Revenue`, .after=last_col()) %>%
+  rename(`Average Projected Revenue`=`All Year Revenue`)
 
-kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=2)), caption = "Projected commercial landings and revenue  (Real USD) that would occur in the NCSMNM addition if it was reopened to fishing based on 2012-2016.")  %>%
+# set dynamic varible names (cant use paste0 in rename in tidyverse)
+#names(allyrrev_table)[names(allyrrev_table) == "All Year Revenue"] <- paste0("Average Projected Revenue")
+
+
+kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=2)), caption = "Projected annual commercial landings and revenue  (Real USD) that would occur in the NCSMNM addition if it was reopened to fishing based on 2012-2016 patterns of fishing.")  %>%
       kable_styling(full_width = T) %>% 
       row_spec(0,bold=TRUE)  %>%
       row_spec(nrow(allyrland_table),bold=T)
@@ -1430,7 +1362,7 @@ allyrland_table <- rbind(allyrland_table, c("Total", colSums(allyrland_table[,2]
 allyrland_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE))) < 500,"<500", comma_format(trim = TRUE, accuracy = 1000)(as.numeric(as.numeric(gsub(",","", x = unlist(allyrland_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
 
 # set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- "Average Projected Landings Landings"
+names(allyrland_table)[names(allyrland_table) == "All Year Total"] <- "Average Projected Landings"
 
 #kbl(allyrland_table, booktabs=T,  align=c("l",rep('r',times=1)), caption = "Projected commercial landings (pounds) that would occur in the NCSMNM addition if it was reopened to fishing based on 2012-2016.")  %>%
 #      kable_styling(full_width = F) %>%
@@ -1462,15 +1394,15 @@ allyrrev_table <- rbind(allyrrev_table, c("Total", colSums(allyrrev_table[,2])))
 allyrrev_table[,2] <- ifelse(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE))) < 500,"<$500", comma_format(trim = TRUE, accuracy = 1000, prefix="$")(as.numeric(as.numeric(gsub(",","", x = unlist(allyrrev_table[2], use.names = FALSE)))))) # add less than sign if revenue is less than $500
 
 # set dynamic varible names (cant use paste0 in rename in tidyverse)
-names(allyrrev_table)[names(allyrrev_table) == "All Year Total"] <- paste0(numyear, " Year Revenue")
+names(allyrrev_table)[names(allyrrev_table) == "All Year Total"] <- paste0("Average Projected  Revenue")
 
 
 allyrrev_table <-allyrrev_table %>%
   left_join(allyrland_table, by="Gear Type")
 
-kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=2)), caption = "Projected commercial landings (pounds) and revenue that would occur in the NCSMNM addition if it was reopened to fishing based on 2012-2016.")  %>%
+kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=2)), caption = "Projected commercial landings (pounds) and revenue that would occur in the NCSMNM addition if it was reopened to fishing based on 2012-2016 fishing patterns.")  %>%
       kable_styling(full_width = T) %>%
-      row_spec(nrow(allyrrev_table)-1,hline_after=TRUE) %>% 
+#      row_spec(nrow(allyrrev_table)-1,hline_after=TRUE) %>% 
       row_spec(nrow(allyrrev_table),bold=T) %>% 
       row_spec(0,bold=TRUE) 
 ```
@@ -1511,7 +1443,7 @@ arrange(desc(REVENUE)) %>%
 names(Total_REV)[names(Total_REV) == "REVENUE"] <- paste0(numyear, " Year Average Revenue")
 names(Total_REV)[names(Total_REV) == "QTYKEPT"] <- paste0(numyear, " Year Average Landings")
 
-kbl(Total_REV, booktabs=T,  align=c("l",rep('r',times=2)), caption = "2012-2016 Year Average Landings (Millions of Pounds) and Revenue (Millions of 2021 Dollars), All Areas")  %>%
+kbl(Total_REV, booktabs=T,  align=c("l",rep('r',times=2)), caption = "2012-2016 Year Average Landings (Millions of Pounds) and Revenue (Millions of 2020 Dollars), All Areas")  %>%
       kable_styling(full_width = T) %>%
       row_spec(nrow(Total_REV),bold=T)  %>% 
       row_spec(0,bold=TRUE) %>%
@@ -1602,17 +1534,109 @@ rm(rp)
 ```
 
 
-#### Economic impacts relative to the baseline
+\clearpage
 
-The proposed action would make not changes to the types of fishing activities that can be currently conducted in the NCSMNM; fishing is likely to continue at levels described in Table \ref{tab:baseline_revenues}.  However, the proposed action removes the risk that future administrations will open NCSMNM to commercial fishing by presidential proclamation. 
+\setcounter{section}{5}
+\setcounter{subsection}{11}
+<!---
+## Regulatory Impact Analysis and Initial Regulatory Flexibility Analysis
 
-##### Benefits of regulation
+This document provides the analysis and conclusions to address the requirements of Executive Order 12866 and the Regulatory Flexibility Act (RFA).  NMFS requires the preparation of a Regulatory Impact Analysis (RIA) for all regulatory actions that either implement or significantly amend a Fishery Management Plan (FMP). The RIA provides a comprehensive review of the changes in net economic benefits to society associated with proposed regulatory actions. This analysis reviews the problems and policy objectives prompting the regulatory proposals and evaluates the alternatives presented as a solution. This analysis ensures that we systematically and comprehensively consider all available alternatives so public welfare can be enhanced in the most efficient and cost-effective way. This RIA addresses multiple items in the regulatory philosophy and principles of Executive Order (EO) 12866. 
+
+An Initial Regulatory Flexibility Analysis (IRFA; section NNNN) has been prepared to further evaluate the economic impacts of the various alternatives presented in this document on regulated small business entities. --->
+
+## Regulatory Impact Analysis (E.O. 12866)
+
+The purpose of Executive Order 12866 (E.O. 12866, 58 FR 51735, October 4, 1993) is to enhance planning and coordination with respect to new and existing regulations. This E.O. requires the Office of Management and Budget (OMB) to review regulatory programs that are considered to be “significant.” E.O. 12866 requires a review of proposed regulations to determine whether or not the expected effects would be significant, where a significant action is any regulatory action that may:
+
+*  Have an annual effect on the economy of $100 million or more, or adversely affect in a material way the economy, a sector of the economy, productivity, jobs, the environment, public health or safety, or State, local, or tribal governments or communities;
+*  Create a serious inconsistency or otherwise interfere with an action taken or planned by another agency;
+*  Materially alter the budgetary impact of entitlements, grants, user fees, or loan programs or the rights and obligations of recipients thereof; or
+*  Raise novel legal or policy issues arising out of legal mandates, the President’s priorities, or the principles set for the Executive Order.
+ 
+In deciding whether and how to regulate, agencies should assess all costs and benefits of available regulatory alternatives. Costs and benefits shall be understood to include both quantifiable measures (to the fullest extent that these can be usefully estimated) and qualitative measures of costs and benefits that are difficult to quantify, but nevertheless essential to consider. 
+
+Fishing in NCSMNM (with limited temporary exceptions) is currently prohibited by presidential proclamation and the propsed action does not change the currently allowed fishing areas.  Instead, the proposed action codifies Proclamation 9496, as amended by Proclamation 10287, into regulation. These proclamations directed the Secretaries of Commerce and Interior to promulgate regulations necessary for the proper care and management of the Monument. 
+The costs, relative to the *status quo*, are opportunity cost of fishing adjusted by the likelihood that future administrations would reopen the NCSMNM to commercial fishing. Fishing in much of the NCSMNM (with limited exceptions) is currently also prohibited through the Georges Bank Deep-Sea Coral Protection Area, which was implemented through the NEFMC's Omnibus Deep-Sea Coral Amendment (86 FR 33553).
+
+The benefits, relative to the *status quo*, are derived from an increased level of certainty in improving the condition of corals, sponges, and other deep-sea fauna in NCSMNM and indirectly improving the production of other species which rely on this habitat. Due to data limitations we were not able to quantify the costs or benefits of this rule associated with habitat conservation. Still, we believe that the overall impact of the proposed rule falls well short of the annual \$100 million threshold for a significant economic action because Vessel Trip Reports indicate that fishing vessels would derive \$1-2 million in annual gross revenue from the NCSMNM Addition. 
+
+
+### Management Goals and Objectives
+
+The goal of this amendment is to protect the geological, ecological, and biological resources within the Monument.  This amendment is needed to codify Proclamation 9496, as amended by Proclamation 10287, which directs the Secretaries to promulgate regulations necessary for the proper care and management of the Monument.
+
+### Description of the Fishery and other affected entitites
+
+See Section 3.0 for a description of the fisheries.  Section [Baseline-Description] summarizes relevant aspects of the fishery.
+
+### Statement of the Problem (Market Failure){#market_failure}
+
+Habitat inside NCSMNM is important for a  host of species including managed species such as cod and American anglerfish, and unmanaged species including a host of both vertebrate and invertebrate animals.  Deep-sea corals and other fauna in the NCSMNM are slow growing and some species have limited dispersal capability. These features, combined with the branching and sometimes brittle structure of some taxa, make them vulnerable to mechanical disturbance, such as from fishing gear.  
+
+NCSMNM can provide economic benefits in through extractive and non-extractive means.  First, high-quality habitat can increase the stocks of recreationally and commercially exploited species.  It may also agglomerate stocks of exploited species, making them easier to harvest.  These benefits are do not necessarily cease when commercial fishing inside the areas is prohibited: mature fish may move outside the protected area or produce offspring that move outside the protected area [@Holland1996] These are extractive uses.  Second, the NCSMNM can be associated with existence and bequest uses: the people of the nation may derive value  from knowing the NCSMNM exists and knowing that it will continue to exist for future generations.  
+
+As a nonmarket good subject to open access, habitat is a good that economists expect to be overutilized without management intervention.  This is because the impacts of fishing on both the structure and function of deep-sea coral is not factored into an individual fisherman’s decision-making. In the absence of corrective policies, the actions of individual profit-maximizing firms imposes an externality; excess degradation of habitat above and beyond a socially optimal level. For quickly regenerating substrate and habitat, like featureless sandy bottoms with high flow of water, the practical effects of these externalities are likely minimal.  However, for habitat in the NCSMNM, the effects may be larger.  First, the functional degradation of habitat can impact the productivity of managed and unmanaged species that rely on the flora and fauna in the area. These impacts can lead to decreases in the future flow of benefits derived from recreationally and commercially exploited species. Second, these impacts can decrease the flow of nonuse values such as bequest and existence value of both the habitat and environment, including things like deep sea coral and other species.  
+
+A cause and effect relationship between high-quality habitat and fish populations is hard to determine, and our understanding of relationships between deep-sea corals and fishes is situational and inferential (e.g., Baker et al. 2012), particularly in seamount habitats [@auster2007linking]. At the Gulf of Maine sites, economically important species were observed in coral habitats, including Acadian redfish (juveniles, adults, and pregnant females), haddock, pollock, cusk, monkfish, cod, silver hake, Atlantic herring, spiny dogfish, squid, and lobster. There is recent evidence that deep-sea corals play an important role in the early life history of some fish and shark species, providing nursery grounds and habitat for protection, reproduction, and feeding [@costello2005role] . @baillon2012deep collected sea pens as trawl bycatch during routine multispecies research surveys and found convincing evidence that several species of sea pens, including *Pennatula aculeata*, *Anthoptilum grandiflorum*, *Pennatula grandis*, and *Halipteris finmarchica*, are being directly utilized as shelter by fish larvae, mainly by those of the redfish (*Sebastes* spp.), one species of which is federally managed under the Northeast Large Mesh Multispecies FMP.  Thus, though the co-occurrence of deep sea coral and species of interest is suggestive, the extent to which productivity of managed and unmanaged species relies on these deep sea coral is highly uncertain, even in qualitative terms. 
+
+The economic values of conservation associated with deep sea corals, including bequest and existence values, are not as well studied as those associated with tropical corals (Figure \ref{fig:coral_lit_table}). What value estimates exist focuses on two countries, Norway and Ireland, and in reality rely on only 3 datasets.  Of note is that a number of these studies indicate heterogeneity in both individual’s willingness to pay for conservation across both countries and allowable activities within conservation areas. For example, @armstrong2019willingness indicates that the Irish public are less willing than Norwegians to trade extractive activities such as fishing and mining off against conservation, the latter weighing pure existence value higher than the former. Additionally, @lariviere2014value, @aanesen2015willingness; @sandorf2016valuing, and @sandorf2017disentangling all rely on the same data, with the differences in estimates depending on how the heterogeneity in preferences across individuals is modeled.  A similar heterogeneity between both individuals and allowable uses has been identified in the Northeast, with some individuals even reporting negative willingness to pay for increases in the size of marine protected areas [@wallmo2008estimating]. The literature search highlights that estimated values are sensitive to the context in which they are solicited, and should account for heterogeneity in preferences for conservation. The values presented in Table 1 thus do not provide great clarity in informing estimation of the value of deep sea coral conservation undertaken within this action. As such, we discuss the benefits of deep sea coral conservation in a qualitative manner. The preferred alternatives designate three coral zones along the shelf break out to the EEZ boundary and in the inshore Gulf of Maine. Given the location of these zones and the specific fishing restriction measures associated with them, they are not likely to cause substantial displacement of fishing effort and therefore substantial increased conservation in the near term, but they will prevent expansion of fishing into these areas in the future. Thus, the benefits of this action derived from conservation of deep-sea corals and managed resources which utilize coral habitats are expected to be positive in direction, but slight in magnitude, and accrue over a long time horizon.
+```{r clt, out.width = "500px", fig.align="center", fig.cap="\\label{fig:coral_lit_table}Valuation studies for Deep Sea Corals"}
+knitr::include_graphics(here("writing","Canyons","Coral_lit_table.png"))
+```
+
+<!---
+\addtocounter{figure}{-1}
+\addtocounter{table}{1}
+
+I've added a table as a figure. So I'm going to add 1 to the Tables Counter and subtract 1 from the figures counter. This is a hack and a half that only works because it's the first table or figure. Otherwise I'd have to setcounter by hand. 
+
+Citation	Country	Empirical Approach	Average Willingness to Pay Estimated
+Armstrong, C.W., Aanesen, M., van Rensburg, T.M. and Sandorf, E.D., 2019. Willingness to pay to protect cold water corals. Conservation Biology, 33(6), pp.1329-1337.	Norway, Ireland	Choice Experiments	NKra 341 ($39)/year/household for 2,500km2 increase
+NKra 424 ($48)/year/household for 7,500km2 increase
+NKra 880 ($100)/year/household if important fish habitat
+Glenn, H., Wattage, P., Mardle, S., Van Rensburg, T., Grehan, A. and Foley, N., 2010. Marine protected areas — substantiating their worth. Marine Policy, 34(3), pp.421-430.	Ireland	Choice Experiments	Insignificant estimates
+Sandorf, E.D., Aanesen, M. and Navrud, S., 2016. Valuing unfamiliar and complex environmental goods: A comparison of valuation workshops and internet panel surveys with videos. Ecological Economics, 129, pp.50-61.	Norway	Choice Experiments	NKra 230-284 ($33-$41)/year/household for 7,500km2 increase
+NKra 457-1,009 ($66-$146)/year/household if important fish habitat
+LaRiviere, J., Czajkowski, M., Hanley, N., Aanesen, M., Falk-Petersen, J. and Tinch, D., 2014. The value of familiarity: effects of knowledge and objective signals on willingness to pay for a public good. Journal of Environmental Economics and Management, 68(2), pp.376-389.	Norway	Choice Experiments	NKra 573 ($87)/year/household for 7,555km2 increaseb
+NKra 1007-2036 ($153-$310)/year/household if important fish habitat
+NKra 232-256 ($35-$39)/year/household add. to protect from fishing
+NKra 257 ($39)/year/household add. to protect from oil drillingb
+Aanesen, M., Armstrong, C., Czajkowski, M., Falk-Petersen, J., Hanley, N. and Navrud, S., 2015. Willingness to pay for unfamiliar public goods: preserving cold-water coral in Norway. Ecological Economics, 112, pp.53-67.	Norway	Choice Experiments	EURa 53 ($63)/year/household for 2,555km2 increase
+EURa 67 ($80)/year/household for 7,555km2 increase
+EURa 166 ($197)/year/household if important fish habitat
+EURa 39 ($46)/year/household add. to protect from fishing
+EURa 16 ($19)/year/household add. to protect from oil drilling
+Sandorf, E.D., Campbell, D. and Hanley, N., 2017. Disentangling the influence of knowledge on attribute non-attendance. Journal of choice modelling, 24, pp.36-50.	Norway	Choice Experiments	NKra 314 ($45)/year/household for 2,500km2 increasec
+NKra 370 ($53)/year/household for 7,500km2 increasec
+NKra 292 ($42)/year/household if important fish habitatc 
+NKra -9 (-$1)/year/household add. to protect from fishingc
+NKra -37 (-$5)/year/household add. to protect from oil drillingc
+Wattage, P., Glenn, H., Mardle, S., Van Rensburg, T., Grehan, A. and Foley, N., 2011. Economic value of conserving deep-sea corals in Irish waters: a choice experiment study on marine protected areas. Fisheries Research, 107(1-3), pp.59-67.	Ireland	Choice Experiments	Insignificant estimates
+--->
+
+<!-- #### A Net Present Value Framework  -->
+
+<!-- A Net Present Value (NPV) framework provides a useful theoretical framework for understanding the economic effects of potential changes in human activity allowed inside NCSMNM; however, a full NPV analysis is not performed.  -->
+
+<!-- The seafloor in NCSMNM can be thought of as a capital asset.  Beyond it's value derived from the unique ecological resources that are subject to scientific interest, the seafloor ecoystem services, including habitat for species that are commercially valuable.  The quality of the capital asset decreases after fishing occurs when bottom-contact from fishing gear damages the unique oceanographic formations or destroys marine life.  Because fauna in the area (like deep-sea coral and sponges) grow, the habitat can slowly regenerate after these events. However, coral and sponges are fragile, slow-growing, and relatively immobile, so even small amounts of intermittent activity may have long-lasting, negative impacts on the stock of habitat in NCSMNM.   -->
+
+<!-- The economic activity in the NCSMNM can be characterized as series of flows. Each year, benefits accrue to the nation.  These benefits may take the form of producer and consumer surplus derived from extractive uses, like commercial fishing.  Benefits may also accrue though non-extractive uses through bequest and existence values described in the previous section. -->
+
+<!-- Understanding the NPV of economic activity in NCSMNM arising from any policy is then an exercise of discounting and summing the flows of benefits (accruing from extractive and non-extractive uses) over time. An economically optimal policy with respect to commercial fishing in the NCSMNM balances the additional benefits of fishing (consumer and producer surpluses) against the costs of fishing (the actual costs, plus damages to the habitat).   -->
+
+
+### Economic impacts relative to the baseline
+
+The proposed action would make not changes to the types of fishing activities that can be currently conducted in the NCSMNM; fishing is likely to continue at levels described in Table \ref{tab:baseline_revenues}.  However, the proposed action removes the risk that these areas would reopened NCSMNM to commercial fishing by presidential proclamation. 
+
+#### Benefits of regulation
 Relative to the baseline, the benefits of the proposed action include annual bequest values, existence values, and incremental contribution of the NCSMNM habitat to the productivity of commercial valuable resources that are harvested outside of the NCSMNM areas.  These are adjusted by the probability that the protections for NCSMNM would be lifted in the future.  All of these values are difficult to quantify.
 
-##### Costs of regulation 
+#### Costs of regulation 
 Compared to the baseline, the costs of regulation are equal to the losses in societal welfare (a combination of producer and consumer welfare) associated with the inability to fish in the NCSMNM, also multiplied by the probability that protections for NCSMNM would be lifted in the future.
 
-We are unable to estimate the changes societal welfare from fishing within in the areas of the preferred alternative. Instead we present an estimate of revenue and landings that may  return to the NCSMNM addition as an estimate of the potential scale of the industry.  These revenue and landings figures are contained in Tables \ref{tab:top_fmp_landings_table} to \ref{tab:revenue_table_by_gear} and  Figures \ref{fig:top_fmp_landings_plots} -\ref{fig:revenue_gear_plot}.  
+We are unable to estimate the changes societal welfare from fishing within in the areas of the preferred alternative. Instead we present an estimate of revenue and landings that may  return to the NCSMNM addition as an estimate of the potential scale of the industry.  These revenue and landings figures are contained in Table \ref{tab:top_fmp_landings_table} to \ref{tab:revenue_table_by_gear} and  Figures \ref{fig:top_fmp_landings_plots} -\ref{fig:revenue_gear_plot}.  
 
 
 <!---
@@ -1631,15 +1655,15 @@ A reduction in ecosystem benefits stemming from reduced protection in NCSMNM rep
 
 \newpage
 
-### Regulatory Flexibility Act Analysis
+## Regulatory Flexibility Act Analysis
 
-####  A description of the reasons why action by the agency is being considered.
+###  A description of the reasons why action by the agency is being considered.
 By reference
 
-#### A succinct statement of the objectives of, and legal basis for, the proposed rule.
+### A succinct statement of the objectives of, and legal basis for, the proposed rule.
 By reference
 
-#### Number of Small entities
+### Number of Small entities
 
 The directly regulated entities are the firms that currently hold at least 1 Northeast US fishing permit that could be used to fish in the Northeast Canyons and Seamounts. A few permit categories (Lobster: A1, A2, A4, A5, A5W, A6, and AOC; General Category Scallop B) were not included when constructing the set of directly regulated entities because these permit categories to not enable a vessel to fish in the Northeast Canyons and Seamounts areas.  There are a total of 1,338 small firms and 11 Large firms.  1,024 of the small firms derive the majority of their revenue from commercial fishing operations.  314 derive the majority of their revenue from for-hire recreational activities.  Firms that are classified as "for-hire" may still fish commerically -- these firms are included in the tabulation of directly regulated entities, although their main source of income (for-hire fishing) would not be directly impacted  by the proposed action. 
 
@@ -1716,7 +1740,7 @@ kbl(Directly_Regulated_Entities_table, digits=0,booktabs=T, align=c("l",rep('r',
 
 Table \ref{tab:Directly_Regulated_Entities} describes numbers of directly regulated entities, their main activities, and their revenues from various sources. The distribution of gross receipts for both classes is highly right-skewed: there are many firms with a small to moderate amount of gross receipts and a handful of firms with much more economic activity. This results in the average receipts being higher than the 75$^th$ percentile of gross receipts for these two groups.
 
-RFA requires using the trailing three years to determine whether an entity is small or large.  Using this time period (2019-2021) would underestimate the importance of the NCSMNM to these firms, because the area was not open to fishing for much of this time.  Therefore, the fishing activity during the 2012-2016 time period are used characterize the importance of NCSMNM.  Only commercial fishing activity is described. Table \ref{tab:Firm_average_in_Area} describes the Gross Receipts from all sources and from just within the NCSMNM addition. Table \ref{tab:AnyInside} describes the Gross Receipts from all sources and from just within the NCSMNM addition only for firms that fished inside the NCSMNM addition area.  None of the firms classified as "For-Hire" firms were active inside the NCSMNM addition area.
+SBA mandates the use of the three most recent years of data to determine whether an entity is small or large.  Using this time period (2019-2021) to describe the importance of NCSMNM to these firms is not appropriate, because the area was not open to fishing for much of this time.  Therefore, the fishing activity during the 2012-2016 time period are used characterize the importance of NCSMNM.  Table \ref{tab:Firm_average_in_Area} describes the Gross Receipts from all sources and from just within the NCSMNM addition. Table \ref{tab:AnyInside} describes the Gross Receipts from all sources and from just within the NCSMNM addition only for firms that fished inside the NCSMNM addition area.  None of the firms classified as "For-Hire" firms were active inside the NCSMNM addition area.
 
 ```{r Firm_average_in_Area}
 aff_key <- affiliates %>%
@@ -1785,7 +1809,7 @@ DRE_2012_2016InsideOnly <- Firm_activity %>%
 
 
 
-kbl(DRE_2012_2016InsideOnly, digits=0,booktabs=T,  align=c("l",rep('r',times=6)), caption =   "Yearly Average and Total Revenues (2012-2016), RFA Directly Regulated Entities that are Active in the NCSMNM")  %>%
+kbl(DRE_2012_2016InsideOnly, digits=0,booktabs=T,  align=c("l",rep('r',times=6)), caption =   "Yearly Average Revenues (2012-2016), RFA Directly Regulated Entities that are Active in the NCSMNM")  %>%
     #column_spec(5:8, width = "2cm")
     kable_styling(full_width = T) %>% 
     row_spec(0,bold=TRUE) 
@@ -1794,11 +1818,11 @@ kbl(DRE_2012_2016InsideOnly, digits=0,booktabs=T,  align=c("l",rep('r',times=6))
 ```
 
 
-#### Percentage of Revenue by Firm
+### Percentage of Revenue by Firm
 
-We also plot the percentage of each firm's total commercial fishing revenue derived from inside the NCSMNM addition area (Figure \ref{fig:percent_of_revenue_by_firm}).  Only firms with revenue from the area are included in the plots; these plots are companions to Table \ref{tab:AnyInside}.  The area inside the boxes of indicate capture the 25$^th$-75$^th$ percentiles, indicating that,  after excluding firms that do not use the NCSMNM addition area, most firms derive a small proportion of their total revenue from the NCSMNM addition area. 
+We also plot the percentage of each firm's total commercial fishing revenue derived from inside the NCSMNM addition area (Figure \ref{fig:percent_of_revenue_by_firm}).  Only small firms with revenue from the area are included in the plots; these plots are companions to Table \ref{tab:AnyInside}.  The area inside the boxes of indicate capture the 25$^th$-75$^th$ percentiles, indicating that,  after excluding firms that do not use the NCSMNM addition area, most firms derive a small proportion of their total revenue from the NCSMNM addition area. 
 
-```{r percent_of_revenue_by_firm, eval = T, fig.cap="\\label{fig:percent_of_revenue_by_firm} Annual Firm Revenue Percentage Boxplots, only firms with some activity inside NCSMNM Addition"}  
+```{r percent_of_revenue_by_firm, eval = T, fig.cap="\\label{fig:percent_of_revenue_by_firm} Annual firm revenue percentage boxplots, only small firms with some activity inside NCSMNM Addition"}  
 
 ##########################################################################
 # testing
@@ -1819,6 +1843,7 @@ PermitInsideRev <- aff_key %>%
     AllREV = sum(REVENUE,na.rm=T)) %>%
     filter(Area != "Other") %>%
     filter(InsideREV >0 ) %>%
+    filter(Size=="Small") %>%
   mutate(Percent=100*InsideREV/AllREV,
          Year=as.character(Year)) %>%
   arrange(desc(InsideREV))
@@ -1872,9 +1897,9 @@ rm(boxplot)
 
 ```
 
-Similarly, box-whisker plots of firm's total commercial fishing revenue derived from inside the NCSMNM addition area (Figure \ref{fig:revenue_by_firm}) illustrate that most of the firms earn less than \$30,000 in gross receipts from the NCSMNM addition.
+Similarly, box-whisker plots of firm's total commercial fishing revenue derived from inside the NCSMNM addition area (Figure \ref{fig:revenues_by_firm}) illustrate that most of the firms earn less than \$30,000 in gross receipts from the NCSMNM addition.
 
-```{r rev_by_firm, eval = T, fig.cap="\\label{fig:revenue_by_firm} Annual Firm Revenue Boxplots, only firms with some activity inside NCSMNM Addition"}  
+```{r rev_by_firm, eval = T, fig.cap="\\label{fig:revenues_by_firm} Annual Firm Revenue Boxplots, only Small firms with some activity inside NCSMNM Addition"}  
 
 num_years<-length(unique(PermitInsideRev[PermitInsideRev$Year!="Total",]$Year))
 
@@ -1882,6 +1907,7 @@ num_years<-length(unique(PermitInsideRev[PermitInsideRev$Year!="Total",]$Year))
 for (z in unique(PermitInsideRev$Area)) {
   Permitboxplot <- PermitInsideRev %>%
     filter(Area==z) %>%
+    filter(Size=="Small") %>%
     mutate(InsideREV=InsideREV/1000) %>%
     mutate(Year = ifelse(Year == "Total", "Average", Year)) %>%
     mutate(InsideREV = ifelse(Year=="Average",  InsideREV/num_years, InsideREV))
@@ -1896,7 +1922,7 @@ for (z in unique(PermitInsideRev$Area)) {
   stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..)) +
   scale_fill_viridis(discrete=TRUE) +
   coord_flip() +
-  scale_y_continuous(limits=c(0,100), breaks=seq(0,100,10))+
+  scale_y_continuous(limits=c(0,60), breaks=seq(0,60,10))+
   labs(x = NULL,
        y = "Annual Revenue ('000s) Inside the NCSMNM Addition by Firm") +
   theme_bw() +
@@ -1916,32 +1942,33 @@ rm(boxplot)
 ```
 Figure \ref{fig:REV_PCT_scatter} plots average annual revenue against the percentage of revenue derived from the NCSMNM addition.  This illustrates that a few firms use the NCSMNM addition for more than 50\% of their gross revenues, but these firms have relatively low gross receipts.  A few firms derive more than $75,000 of revenue from NCSMNM, but these firms earn a low proportion of their total revenue from this area.    
 
-```{r Rev_and_Pct_scatter,eval = T, fig.cap="\\label{fig:REV_PCT_scatter} Scatterplot of Percentage of Firm Revenue Inside NCSMNM against Annual Firm Revenue Inside NCSMNM, only firms with some activity inside NCSMNM Addition"}
+```{r Rev_and_Pct_scatter,eval = T, fig.cap="\\label{fig:REV_PCT_scatter} Scatterplot of percentage of small firm revenue inside NCSMNM against annual firm revenue inside NCSMNM, only firms with some activity inside NCSMNM Addition."}
 
 num_years<-length(unique(PermitInsideRev[PermitInsideRev$Year!="Total",]$Year))
 
 
 PCT_Scatter<-PermitInsideRev %>%
-  filter(Year=="Total") %>%
+  filter(Year=="Total" & Size=="Small") %>%
   mutate(
     InsideREV=InsideREV/num_years/1000,
     InsideLANDED=InsideLANDED/num_years,
-    AllREV=AllREV/num_years
-  )
+    AllREV=AllREV/num_years/1000
+  ) %>%
+  filter(AllREV<=1000)
 
-ggplot(PCT_Scatter, aes(x=InsideREV, y=Percent)) +
+ggplot(PCT_Scatter, aes(x=AllREV, y=Percent)) +
   geom_point() + 
-  labs(x = "Average Annual ('000s) Revenue Inside NCSMNM",
+  labs(x = "Average Annual ('000s) Revenue, all areas",
        y = "Percentage of Firm Revenue Inside NCSMNM")+
-  scale_y_continuous(limits=c(0,100), breaks=seq(0,100,25))
-  scale_x_continuous(limits=c(0,150), breaks=seq(0,150,25))
+  scale_y_continuous(limits=c(0,100), breaks=seq(0,100,20))+
+ scale_x_continuous(limits=c(0,1000), breaks=seq(0,1000,200))
 
 rm(PCT_Scatter)
 ```
 
-```{r count_years, fig.cap="\\label{fig:nyears} Histogram of the number of years that firms were active in the NCSMNM addition. "}
+```{r count_years, fig.cap="\\label{fig:nyears} Histogram of the number of years that small firms were active in the NCSMNM addition. "}
 count_years<-PermitInsideRev %>%
-  filter(Year!="Total") %>%
+  filter(Year!="Total" & Size=="Small") %>%
   group_by(affiliate_id,Size) %>%
   count()
 distinct_firms<-length(unique(count_years$affiliate_id))
@@ -1951,17 +1978,26 @@ distinct_firms<-length(unique(count_years$affiliate_id))
 ggplot(count_years, aes(x=n)) + 
   geom_histogram( binwidth=1, fill="gray", color="gray", alpha=0.9) +
   labs(x = "Number of Years (2012-2016) fished in NCSMNM Addition" ,
-       y = "Number of Firms Active in NCSMNM Addition")  
+       y = "Number of Small Firms Active in NCSMNM Addition")  
 
 
 ```
 
 The NCSMNM addition was not used by every firm in every year. Table \ref{tab:AnyInside} shows that 80-110 firms used the NCSMNM addition each year.  There were `r distinct_firms` that fished in the NCSMNM addition at any point over the 2012-2016 time period.  Many firms did not fish in this area in all years.  Figure \ref{fig:nyears} is a histogram of the number of years each firm fished inside the NCSMNM addition. Almost 60 firms fished there for just 1 year while 33 fished there in all five years.
 
-#### Compliance Requirements
+
+Together, these Tables and Figures illustrate that:
+
+1.  Few firms use the NCSMNM area at all (Tables \ref{tab:Firm_average_in_Area} and \ref{tab:AnyInside})
+2.  Small and Large firms that do use the NCSMNM addition derive only a small proportion of their revenue from the NCSMNM addition (Table \ref{tab:AnyInside}). 
+3.  As a percentage of gross reciepts, small firms derive slightly more revenue that large firms from NCSMNM  (Table \ref{tab:AnyInside}).
+4.  A handful of small firms use the NCSMNM addition for moderate amount of their fishing \ref{fig:percent_of_revenue_by_firm}.
+5.  However, the firms that do derive more than 20\% of their gross receipts from the NCSMNM addition are quite small in size.
+
+### Compliance Requirements
 A description of the projected reporting, record-keeping, and other compliance requirements of the proposed rule, including an estimate of the classes of small entities which will be subject to the requirements of the report or record.
 
-#### Duplications
+### Duplications
 An identification, to the extent practicable, of all relevant Federal rules, which may duplicate, overlap, or conflict with the proposed rule.
 
 First, we note that commerical fishing (excepting red crab fishing) is currently prohibited in 82\% of the NCSMNM.  Therefore, the proposed rule somewhat overlaps with the current fishing regulations. 
