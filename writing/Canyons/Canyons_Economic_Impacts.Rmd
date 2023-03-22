@@ -1894,9 +1894,9 @@ rm(boxplot)
 
 ```
 
-Similarly, box-whisker plots of firm's total commercial fishing revenue derived from inside the NCSMNM addition area (Figure \ref{fig:revenue_by_firmAA}) illustrate that most of the firms earn less than \$30,000 in gross receipts from the NCSMNM addition.
+Similarly, box-whisker plots of firm's total commercial fishing revenue derived from inside the NCSMNM addition area (Figure \ref{fig:revenuebyfirmAA}) illustrate that most of the firms earn less than \$30,000 in gross receipts from the NCSMNM addition.
 
-```{r rev_by_firm, asis=TRUE, eval = T, fig.cap="\\label{fig:revenue_by_firmAA} Annual firm revenue percentage boxplots, only small firms with some activity inside NCSMNM Addition"}  
+```{r rev_by_firm, eval = T, fig.cap="\\label{fig:revenuebyfirmAA} Annual firm revenue boxplots"}  
 
 num_years<-length(unique(PermitInsideRev[PermitInsideRev$Year!="Total",]$Year))
 
