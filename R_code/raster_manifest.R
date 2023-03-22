@@ -1,5 +1,6 @@
 #Rscript to save the full raster manifest to an Rds. If you are doing lots of operations on the individual rasters, this will save a little time.
-
+library(here)
+here::i_am("R_code/raster_manifest.R")
 todaysdate = as.Date(Sys.time())
 
 desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
@@ -10,8 +11,8 @@ if (desktopUse) { # set the root path of the network, based on whether on deskto
 } else {
   network_location = network_location_remote
 }
-raster_folder = file.path(network_location,"work5/socialsci/Geret_Rasters/Data/individualrasters")
-output_f = file.path(network_location,"home2/mlee/READ-SSB-Lee-Raster_requests/raw_data")
+raster_folder = file.path(network_location,"work5","socialsci","Geret_Rasters","Data","individualrasters")
+output_f = here("raw_data")
 
 message("Creating output folder if it doesnt exist..")
 dir.create(file.path(output_f), showWarnings=T)
