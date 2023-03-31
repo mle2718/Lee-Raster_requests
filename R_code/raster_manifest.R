@@ -3,14 +3,9 @@ library(here)
 here::i_am("R_code/raster_manifest.R")
 todaysdate = as.Date(Sys.time())
 
-desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
 
-if (desktopUse) { # set the root path of the network, based on whether on desktop or server
-  network_location = network_location_desktop
-  system("ipconfig", intern = TRUE)
-} else {
-  network_location = network_location_remote
-}
+network_location = network_location_remote
+  
 raster_folder = file.path(network_location,"work5","socialsci","Geret_Rasters","Data","individualrasters")
 output_f = here("raw_data")
 
@@ -27,7 +22,7 @@ message("Done.")
   } else {
     warning("Possibly using desktop or Mars server with fewer cores, it's recommened to use the Venus server
             when running this function. Allocating 8 cores..", immediate. = TRUE, call. = FALSE)
-    max.nodes = 8
+    max.nodes = 16
     desktopUse = TRUE
   }
 
