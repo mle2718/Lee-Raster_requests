@@ -1,25 +1,28 @@
 # R script to create folders for a project
 
-fmp<-"RiverHerring"
-action<-"July2021"
+fmp<-"Herring"
+action<-"Framework9"
+
+library(here)
+here::i_am("R_code/project_logistics/setup_new_action.R")
 
 # Setup directories for R_code
-dir.create(file.path("R_code",fmp,action), recursive=TRUE)
+dir.create(here("R_code",fmp,action), recursive=TRUE)
 
 # Setup directories for images
-dir.create(file.path("images",fmp,action), recursive=TRUE)
+dir.create(here("images",fmp,action), recursive=TRUE)
 
 # Setup directories for raw_data
-dir.create(file.path("raw_data",fmp,action),  recursive=TRUE)
+dir.create(here("raw_data",fmp,action),  recursive=TRUE)
 
 # Setup directories for raw_data
-dir.create(file.path("input_data",fmp,action),  recursive=TRUE)
+dir.create(here("input_data",fmp,action),  recursive=TRUE)
 
 # Setup directories for geotiffs
-dir.create(file.path("geotiffs",fmp,action),  recursive=TRUE)
+dir.create(here("geotiffs",fmp,action),  recursive=TRUE)
 
 # Setup directories for stata_code
-dir.create(file.path("stata_code",fmp,action),  recursive=TRUE)
+dir.create(here("stata_code",fmp,action),  recursive=TRUE)
 
 # Setup directories for tables
-dir.create(file.path("tables",fmp,action),  recursive=TRUE)
+dir.create(here("tables",fmp,action),  recursive=TRUE)
