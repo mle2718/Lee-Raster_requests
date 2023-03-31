@@ -390,8 +390,9 @@ deflators <- NULL
 ```
 
 ```{r create_REVENUEFILE_and_save, eval=extract_switch}
-
+#####################################################################
 # Subset the small mesh bottom trawl and the midwater trawl fleets
+#####################################################################
 FIN2<-FIN[which(FIN$GEARNM %in% c("TRAWL-BOTTOM") & FIN$MESH <=3.5) ,]
 FIN3<-FIN[which(FIN$GEARNM %in% c("TRAWL-MIDWATER")) ,]
 
