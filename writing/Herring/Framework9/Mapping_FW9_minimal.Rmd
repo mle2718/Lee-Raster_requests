@@ -1,0 +1,434 @@
+---
+title: "Maps for Action TBD"
+author: Min-Yang Lee
+date: "`r format(Sys.time(), '%B %d, %Y')`" 
+output:
+  pdf_document:
+    keep_tex: TRUE
+    fig_caption: Yes
+  word_document: default
+  html_document: 
+   self_contained: TRUE
+   toc: TRUE
+   toc_float: TRUE
+urlcolor: blue
+editor_options:
+  chunk_output_type: console
+compact-title: FALSE
+---
+<!-- 
+This is the markdown document used to make raster maps for Herring FW7.  It uses the offshoreWind package
+-->
+
+```{r global_options, include=FALSE}
+
+library(here)
+here::i_am("writing/Herring/Framework9/Mapping_FW9_minimal.Rmd")
+
+# A switch to run or not run some of the confidentiality code.  Set to true to run the confidentiality checker and mapping. Set to False to skip this lengthy step
+make_rasters_switch<-FALSE
+extract_switch<-FALSE
+confid1_switch<-FALSE
+# 
+# # ### install offshoreWind package from Github if needed
+# if(!require(offshoreWind)) {
+#   if(!require(devtools)) {
+#     install.packages("devtools")
+#     require(devtools)}
+#   install_github("dcorvi/offshoreWind")
+#   require(offshoreWind)}
+# 
+library("offshoreWind")
+library("foreign")
+library("data.table")
+library("dichromat")
+library("RColorBrewer")
+library("lattice")
+library("scales")
+library("sp")
+library("rgdal")
+library("raster")
+library("snowfall")
+library("ggplot2")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("knitr")
+library("lubridate")
+library("devtools")
+library("RODBC")
+library("rasterVis")
+library("classInt")
+library("rgeos")
+library("fredr")
+library("lubridate")
+
+#############################################################################
+#knitr options
+
+knitr::opts_chunk$set(echo=FALSE, warning = FALSE, error = FALSE, message = FALSE, comment = FALSE, cache = FALSE, progress = TRUE, verbose = FALSE, 
+											dpi = 600)
+options(tinytex.verbose = TRUE)
+# options(knitr.table.format = "latex")
+# knit: (function(inputFile, encoding) { rmarkdown::render(inputFile, encoding = encoding, output_file = file.path(dirname(inputFile), 'myfile.pdf')) })
+#############################################################################
+
+
+
+    network_location = network_location_remote
+
+
+
+dmis_table = "APSD.DMIS_WIND_TEST@garfo_nefsc"
+
+
+#############################################################################
+
+#############################################################################
+# versioning options
+todaysdate <- Sys.Date()
+#todaysdate<-"2021-05-18"
+
+image_date<-"2023-03-31"
+#############################################################################
+# Paths, names, and locations of inputs and outputs
+offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
+project_root_path<-file.path(network_location,"home2","mlee","READ-SSB-Lee-Raster_requests")
+wind_area_hard_name = "Herring Framework 7"
+overlap_data_path = file.path(project_root_path, "overlap_data")
+
+raster_manifest_location<-file.path(project_root_path,"raw_data")
+
+individual.raster.file="raster_manifest_2023-03-28.Rds"
+#individual.raster.file=paste0("raster_manifest_",todaysdate,".Rds")
+payloadRDS=file.path(raster_manifest_location,individual.raster.file)
+
+
+root.geotiff.path<-file.path(project_root_path,"geotiffs","Herring","Framework9")
+root.image.path = file.path(project_root_path,"images","Herring","Framework9")
+root.table.path = file.path(project_root_path,"tables","Herring","Framework9")
+
+ML.GIS.PATH<-file.path(network_location,"home2", "mlee", "spatial data")
+
+
+
+output_f = file.path(project_root_path,"raw_data","Herring","Framework9")
+
+
+#############################################################################
+
+source(file.path(project_root_path,"R_code/project_logistics/R_credentials.R"))
+
+
+
+
+#############################################################################
+# GIS options, you  probably shouldn't change these. 
+
+BASE.RASTER = raster(file.path(network_location,"work5","socialsci","Geret_Rasters","Data","BASERASTER_AEA_2"))
+PROJ.USE = CRS('+proj=aea +lat_1=28 +lat_2=42 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs +ellps=GRS80 +towgs84=0,0,0 ') 
+# Albers Equal Area conic (in meters)
+
+#############################################################################
+
+
+START.YEAR<-2008
+#START.YEAR<-2018
+END.YEAR<-2021
+
+deflation_base_period<-"2020.2"
+
+
+###################################################################################################
+############SETUP RASTER MAPPING AND CONFIDENTIALITY OPTIONS ######################################
+###################################################################################################
+  #rescale to "total [[ACTIVITY]] per square km" requires dividing by 4 because the grid cells are 0.25 km^2
+  rescale_factor<-4
+
+# Seed for subsampling
+    set.seed(24601)
+# Max nodes for raster confidentiality    
+    max.nodes<-8
+##################################
+
+### Setting up BINNING options: 
+
+# Number of breaks  -  for classifiying raster values into bins
+nbreaks=5
+
+# Subsample for Jenks Natural breaks classifications?  Set sampling-seed later
+num_jenks_subs=5000 # Maybe this should be higher; set to 1000 for the map production process. But, the higher the sample the longer it takes to run.
+
+# Here we exclude all cells <=1. (Later we deal with rasters with so few cells above the lower bound value,
+    # that we change the sample size to match the number of cells with those values.)
+jenks.lowerbound=1/rescale_factor
+
+# Min and Max x and y values set to standardize plot extent # the plot extent is set, but then adjusted based on the location of points in the plotted region
+my.ylimit=c(250000,850000)
+my.xlimit=c(1900000,2450000)
+
+#cut point options 
+#my.at <- seq(10, 2500, 500) #this defines equal intervals from 10 to 2500 by 500 units.
+
+#turn things on or or off 
+myscaleopts <- list(draw=FALSE) #Don't draw axes
+#myscaleopts <- list(draw=TRUE)
+
+
+brewer.friendly.ygb <- c("#ffffff", brewer.pal(nbreaks, "YlGnBu"))
+my.friendly.YGB=rasterTheme(region=brewer.friendly.ygb)
+
+#color options (par.setting)
+mycoloropts <- c(my.friendly.YGB)
+our.max.pixels=8e8
+
+# PNG Image Size in pixel units (?) 
+png.height<-1800
+png.width<-1400
+
+## land color 
+mylandfill<- "#d1d1e0"
+############################
+
+
+# Number of color value "bins", plus 0-value will be added too.
+numclasses <- 5
+
+# Set Color Ramp Values 
+brewer.friendly.bupu <- c("#ffffff", brewer.pal(numclasses, "BuPu")) # Blue to purple  (low to high) 
+my.friendly.BUPU <- rasterTheme(region=brewer.friendly.bupu)
+ 
+mycoloropts <-  c(my.friendly.BUPU) 
+
+# Other Plotting Settings 
+myckey <- list(labels=list(cex=2)) # Set the size of color ramp labels (?)
+
+
+
+
+###################################################################################################
+############END OF SETUP RASTER MAPPING AND CONFIDENTIALITY OPTIONS ###############################
+###################################################################################################      
+      
+# Prep data for this vignette must be created with getCallAreaEffort function in the package
+# This must be done seperately from within the vignette and the results placed in a seperate folder 
+# because of the amount of time it takes for the function to run for each shape, which can take a couble of hours 
+# on the VENUS or MARS R servers or days on an 8 processor laptop, which also depends on the number and size of the requested shapefiles 
+
+# All sections should be able to run independtly from each other after the revenue table is built
+
+```	
+
+```{r construct raster manifest, eval = FALSE}  
+source(file.path(project_root_path,"R_code/raster_manifest.R"))
+```
+
+```{r LOAD_EXISTING_GIS_DATA, include=FALSE, eval=FALSE}
+
+##############################################
+## SECTION 4 - LOAD EXISTING GIS DATA
+#################################################
+
+
+
+# STATISTICAL AREAS
+my_basemap1 = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data","corrected_stat_areas"), layer="Statistical_Areas", verbose=F)
+my_basemap1 = spTransform(my_basemap1, CRS=PROJ.USE)# Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# Establish "the other"lat lon" projection info
+PROJ.LATLON = crs(my_basemap1)
+
+#THIRTY MINUTE SQUARES
+basemap_30min = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "Thirty_Minute_Squares"), layer="Thirty_Minute_Squares", verbose=F)
+basemap_30min = spTransform(basemap_30min, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# EastCoast_states
+basemap_eastcoast = readOGR(dsn=file.path(ML.GIS.PATH,"basic spatial data","more_states"), layer="EastCoast_states", verbose=F)
+basemap_eastcoast = spTransform(basemap_eastcoast, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# EEZ Shapefiles
+basemap_EEZ = readOGR(dsn=file.path(ML.GIS.PATH,"nmfs spatial data", "corrected_stat_areas", "EEZ"), layer="EEZ", verbose=F)
+basemap_EEZ = spTransform(basemap_EEZ, CRS=PROJ.USE) # Don't project if you're plotting in a lat/lon, not-projected CRS
+
+# Herring Management areas
+basemap_herringHMA = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures", "garfo gis", "Herring_Management_Areas"), layer="Herring_Management_Areas_mod", verbose=F)
+basemap_herringHMA = spTransform(basemap_herringHMA, CRS=PROJ.USE)
+
+
+#Multispecies Closed Areas CAI, CAII, NLS)
+CAI_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","multispecies closed areas"), layer="mults_ca1", verbose=F)
+CAI_grnd = spTransform(CAI_grnd, CRS=PROJ.USE)
+CAI_grnd = CAI_grnd[CAI_grnd$id==2,]
+
+CAII_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","multispecies closed areas"), layer="mults_ca2", verbose=F)
+CAII_grnd = spTransform(CAII_grnd, CRS=PROJ.USE)
+
+NLS_grnd = readOGR(dsn=file.path(ML.GIS.PATH,"spatial management measures","multispecies closed areas"), layer="mults_nls", verbose=F)
+NLS_grnd = spTransform(NLS_grnd, CRS=PROJ.USE)
+
+Closedgf_04_15 = gUnion(CAI_grnd[CAI_grnd$id==2,],CAII_grnd)
+Closedgf_04_15 = gUnion(Closedgf_04_15,NLS_grnd)
+
+
+
+
+```
+
+
+```{r load_flat, eval = FALSE}  
+#Load a flat file that was previously extracted. 
+FIN<-readRDS(FIN, file= file.path(output_fin, paste0("FIN_FW9.Rds"))) 
+REVENUEFILE<-readRDS(REVENUEFILE, file= file.path(output_revenue, paste0("REVENUEFILE_FW9.Rds"))) 
+
+
+```
+
+
+
+<!-- Begin section to construct and map aggregated rasters for herring pounds only -->
+
+```{r prep_geotiffs1, include=FALSE, eval=FALSE}  
+# Read in the file attributes of the individual rasters.
+fl<-readRDS(payloadRDS)
+
+#I either use FIN or REVENUEFILE as the set of indvidual rasters that I might want to map.
+
+FIELD = "QTYKEPT" #Like "REVENUE","QTYKEPT", "QTYDISC", or "CATCH"
+#SET margin to sum over
+MARGIN = c("MY_MARGIN") #Like "SPPNM","NESPP3","GEARCAT","FMP","STATE1". Comment out if want to sum over all margins in a year.  I'm using the custom column called "MY_MARGIN", which I will define later.
+
+
+#Give the files and folders a pretty name.
+readable_name ="herring-trawl"
+
+
+# Retain the rows that have herring (168) and at least 1 lb QTYKEPT
+
+logical_subset<-quote(which(FINALstack$NESPP3 %in% c(168) &FINALstack[[FIELD]]>=1)) 
+my_margin_name<-quote(paste(FINALstack$MONTH,readable_name, sep="_"))
+
+
+
+
+export.geotiff.path = file.path(root.geotiff.path,paste(readable_name,todaysdate,sep="_"))
+dir.create(export.geotiff.path, recursive=T, showWarnings=FALSE)
+
+#############################################################################
+#############################################################################
+# You shouldn't have to make any changes to this block of code 
+# Create FINALstack by subsetting FIN.  Use the FIN data.table  
+
+# This construction first rows that match the logical. So, we only get rows where herring was retained.
+
+FINALstack=FIN
+FINALstack<-FINALstack[eval(logical_subset),]
+FINALstack = FINALstack[which(!is.na(FINALstack[[FIELD]])),]
+FINALstack = FINALstack[which(FINALstack[[FIELD]]!=0),]
+#THIS IS THE NAME OF MY MARGIN VARIABLE
+#FINAL$MY_MARGIN<-paste(FINAL$MONTH,readable_name, sep="_")
+
+
+FINALstack$MY_MARGIN<-eval(my_margin_name)
+
+
+#We want some information about FINALstack, by "MY_MARGIN"+ "YEAR"
+# Distinct permits, distinct trips, and total amount of FIELD
+FINALstack$FULL_MARGIN<-paste(FINALstack$MY_MARGIN, FINALstack$Year, sep="_")
+
+tsA<-FINALstack %>% 
+  group_by(FULL_MARGIN) %>%
+  mutate(unique_trips = n_distinct(IDNUM),
+         unique_permits = n_distinct(PERMIT),
+         )
+
+tsA<-tsA %>% 
+  group_by(FULL_MARGIN,Year,MONTH) %>%
+  summarize(unique_trips=first(unique_trips),
+            unique_permits=first(unique_permits),
+      total=sum(get(FIELD))
+         )
+tsA$readable_name<-readable_name
+
+tsA<-tsA[c("readable_name","FULL_MARGIN","Year","MONTH","unique_permits","unique_trips","total")]
+
+
+write.csv(tsA,file=file.path(export.geotiff.path,paste(readable_name,"summary_stats.csv")), row.names=FALSE)
+
+confid_prob<-tsA[(which(tsA$unique_permits<=2)),]
+if (nrow(confid_prob)>=1){
+  write.csv(confid_prob,file=file.path(export.geotiff.path,paste(readable_name,"confidential.csv")), row.names=FALSE)
+}
+
+
+#groupwise statistics
+ts<-tsA %>% 
+  group_by(readable_name,MONTH) %>%
+  summarize(
+      total=sum(total)
+         )
+
+
+
+rm(tsA)
+```	
+
+
+
+
+
+# Maps of Selected Fishery Landings and Revenue  
+
+## Data sources:  
+DMIS
+
+<br>
+
+</center>
+## Caveats and notes:
+
+* Values are reported in Real (2nd Quarter of 2020) dollars.
+* Pounds are reported in landed pounds.
+* Data summarized here is based on vessels that are required to provide federal VTRs.
+
+##  Herring Landings
+<!-- 
+cleaned.geotiff.path1<-cleaned.geotiff.path
+cleaned.image.path1<-cleaned.image.path
+-->
+This set of maps (Figure \ref{landings2010}-\ref{landings2018}) contains combined herring pounds per square kilometer from the small mesh otter trawl, midwater trawl, and paired midwater trawl fleets.   Features with less than 3 contributing permits have been anonymized.  We also set the value of any cells with less than 1 lb/square km to zero.
+
+
+
+
+```{r herring_landings2010, fig.show = "hold", out.width = "48%", fig.cap="\\label{landings2010} Herring Landings from the midwater and small mesh otter trawl fleets 2010-2013 ",  fig.align = "center", echo=FALSE, eval=TRUE}
+
+
+cleaned.image.path1<-here("images","Herring","Framework9",paste0("herring-trawl_",image_date),"PII_aggregated")
+
+years<-c("2010","2011","2012","2013")
+knitr::include_graphics(file.path(cleaned.image.path1,paste0("reclass_herring-trawl_QTYKEPT_",years,".png")))
+```
+
+
+```{r herring_landings2014, fig.show = "hold", out.width = "48%", fig.cap="\\label{landings2014} Herring Landings from the midwater and small mesh otter trawl fleets, 2014-2017 ",  fig.align = "center", echo=FALSE, eval=TRUE}
+
+years<-c("2014","2015","2016","2017")
+knitr::include_graphics(file.path(cleaned.image.path1,paste0("reclass_herring-trawl_QTYKEPT_",years,".png")))
+```
+
+
+
+```{r herring_landings2018, fig.show = "hold", out.width = "48%", fig.cap="\\label{landings2018} Herring Landings from the midwater and small mesh otter trawl fleets, 2018-2021 ",  fig.align = "center", echo=FALSE, eval=TRUE}
+
+years<-c("2018","2019","2020","2021")
+knitr::include_graphics(file.path(cleaned.image.path1,paste0("reclass_herring-trawl_QTYKEPT_",years,".png")))
+```
+
+\clearpage
+
+
+
+## References  
+[DePiper GS (2014) Statistically assessing the precision of self-reported VTR fishing locations.](https://repository.library.noaa.gov/view/noaa/4806)  
+[Benjamin S, Lee MY, DePiper G. 2018. Visualizing fishing data as rasters. NEFSC Ref Doc 18-12; 24 p.](https://repository.library.noaa.gov/view/noaa/23030)
+
