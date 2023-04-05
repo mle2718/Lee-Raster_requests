@@ -1,5 +1,5 @@
 ---
-title: "Data Processing Maps for Framework 7"
+title: "Data Processing Maps for Action TBD"
 author: Min-Yang Lee
 date: "`r format(Sys.time(), '%B %d, %Y')`" 
 output:
@@ -989,7 +989,7 @@ cleaned.image.path1<-cleaned.image.path
 
 ```{r reset field}
 
-FIELD<-"QTYKEPT" 
+FIELD<-"REVENUE" 
 
 # re-run the  check_confidential_secondary_aggregation chunks.
 
