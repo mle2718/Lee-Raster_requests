@@ -139,7 +139,7 @@ ML.GIS.PATH<-file.path(network_location,"home2", "mlee", "spatial data")
 overlap_data_path = here("overlap_data",wind_area_hard_name) # the file path of the folder where the overlap files are
 
 # RFA data
-RFA_filepath<-file.path(network_location,"work5", "socialsci", "RFA_EO12866 Guidelines","ownership_data","current data and metadata","affiliates_2022_06_01.Rdata")
+RFA_filepath<-file.path(network_location,"work5", "socialsci", "RFA_EO12866 Guidelines","ownership_data","current data and metadata","affiliates_2023_06_28.Rdata")
 
 #############################################################################
 # GIS options, you  probably shouldn't change these. 
@@ -1672,14 +1672,14 @@ The directly regulated entities are the firms that currently hold at least 1 Nor
 
 ```{r Directly_Regulated_Entities, eval=TRUE}
 load(RFA_filepath)
-affiliates<-affiliates_2022_06_01
-rm(affiliates_2022_06_01)
+affiliates<-affiliates_2023_06_28
+rm(affiliates_2023_06_28)
 affiliates$permit_count<-1
 # Recode small_business to a print friendly string (Large, Small). Recode entity_type to nice casing
 
 affiliates<-affiliates %>%
-  mutate(entity_type_2021=replace(entity_type_2021, entity_type_2021=="FISHING","Fishing"),
-         entity_type_2021=replace(entity_type_2021, entity_type_2021=="FORHIRE","For-Hire"),
+  mutate(entity_type_2022=replace(entity_type_2022, entity_type_2022=="FISHING","Fishing"),
+         entity_type_2022=replace(entity_type_2022, entity_type_2022=="FORHIRE","For-Hire"),
          SB_string=case_when(
            small_business==1 ~ "Small",
            small_business==0 ~ "Large")
@@ -1688,17 +1688,17 @@ affiliates<-affiliates %>%
 
 
 aff_key <- affiliates %>%
-  filter(year==2021) %>%
-  mutate(Type=entity_type_2021, Size=SB_string) %>%
+  filter(year==2022) %>%
+  mutate(Type=entity_type_2022, Size=SB_string) %>%
   select(affiliate_id,permit,Size, Type)
 
 
 # Just look at the 2021 data. Drop permit columns corresponding to Lobster A1, A2, A4, A5, A6, AOC, and A5W because they cannot currently fish in that area.  Get the entity type, small business dummy, and the number of federal permits, and the number of vessels as well. The filter(total>=1) actually cuts out alot of rows
-A2021<-affiliates %>%
+A2022<-affiliates %>%
   filter(year==2021) %>%
   select(-c(LO_A1,LO_A2,LO_A4, LO_A5, LO_A6, LO_AOC, LO_A5W, LGC_B)) %>%
   group_by(affiliate_id) %>%
-  summarise(Type=first(entity_type_2021), Size=first(SB_string),
+  summarise(Type=first(entity_type_2022), Size=first(SB_string),
             vessels=sum(permit_count),
             total=sum(c_across(BLU_1:TLF_3)),
             lob=sum(c_across(starts_with("LO_"))),
@@ -1717,7 +1717,7 @@ A2021<-affiliates %>%
             
 
 #merge them together.
-Directly_Regulated_Entities<-left_join(A2021,summary_affiliates,by='affiliate_id')
+Directly_Regulated_Entities<-left_join(A2022,summary_affiliates,by='affiliate_id')
 
 # Summary of DRE large and small firms in the fishing and for-hire industries.
 # Should recode small_business to a print friendly string (Large, Small)
@@ -1747,9 +1747,9 @@ SBA mandates the use of the three most recent years of data to determine whether
 
 ```{r Firm_average_in_Area}
 aff_key <- affiliates %>%
-  filter(year==2021) %>%
-  filter(entity_type_2021 !="NO_REV") %>%
-  mutate(Type=entity_type_2021, Size=SB_string) %>%
+  filter(year==2022) %>%
+  filter(entity_type_2022 !="NO_REV") %>%
+  mutate(Type=entity_type_2022, Size=SB_string) %>%
   select(affiliate_id,permit,Size, Type)
   
 REVENUEFILE_permit <-REVENUEFILE %>%
