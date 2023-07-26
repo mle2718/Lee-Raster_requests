@@ -163,11 +163,11 @@ AREA.PATH = file.path(network_location,"work5","socialsci","Geret_Rasters","Data
 
 START.YEAR<-2012
 #START.YEAR<-2018
-END.YEAR<-2020
+END.YEAR<-2021
 
 deflate_by <- "year"
 #base year and/or quarter for GDP Deflator
-base_year = 2020 # base year for GDP deflator - Maximum = 2020, Minimum = 1947  - max(GDPDEF_quarterly$Year)
+base_year = 2022 # base year for GDP deflator - Maximum = 2020, Minimum = 1947  - max(GDPDEF_quarterly$Year)
 base_quarter = "" # base quarter for GDP deflator e.g. "Q1", "Q2" etc. Maximum = Q1 of 2020, Minimum = Q1 of 1947 - leave blank to query by year
 
 numyear <- offshoreWind::proper(offshoreWind::numbers2words(as.integer(length(START.YEAR:END.YEAR))))
@@ -243,7 +243,7 @@ numclasses <- 5
 
 # Data_Process_Switch<-TRUE will extract and process data. This takes a while, so set to FALSE after you run the first time.
 Data_Process_Switch<-FALSE
-#Data_Process_Switch<-TRUE
+Data_Process_Switch<-TRUE
 query_dmis_table = FALSE # query old or new dmis table from Oracle? True = yes, False = use flatfile in data/
 query_rec_table = FALSE # query rec table from Oracle? True = yes, False = use flatfile in data/
 query_permits = TRUE # query permit ids for vtr from Oracle? True = yes, False = use flatfile in data/
@@ -353,9 +353,7 @@ SPECIES_CUSTOM<-offshoreWind::SPECIES %>%
 
 ```{r readin_Coral_REVENUEFILE}
 load(file.path(AREA.PATH,"DeepSeaCoralData_Aug_2018.Rdata"))
-REVENUEFILE$REVENUE <- REVENUEFILE$REVENUE*as.numeric(244.4)/as.numeric(233.6)
-REVENUEFILE$InsideREV <- REVENUEFILE$InsideREV*as.numeric(244.4)/as.numeric(233.6) 
-  
+
 FMP_DATA <- REVENUEFILE[which(REVENUEFILE$BROADZONE%in%c("600 m Min","Mt Desert Rock Option 2","Outer Schoodic Ridge","Maximum Area for Conservation")),]
 FMP_DATA$Drop <- 1
 FMP_DATA$Drop[FMP_DATA$GEARCODE%in%c('DRC','DRM','DRO','DRS','DRU','DSC','OHS','OTB','OTC','OTF','OTO','OTR','OTS','OTT','PTB','SED','SES',"DTC","DTS","TTS","MIX","OTH","SED","SES",'GNS',"LLB","GNR","GNO",'PTL',"PTF","PTC","PTS","PTW","PTH","PTO","TRP","PTE","PTX") & FMP_DATA$BROADZONE=="Maximum Area for Conservation"] <- 0
@@ -543,8 +541,10 @@ CFDBS_FMP <-CFDBS_FMP %>%
   left_join(Omnibus, by=c("FMP"="FMP", "YEAR"="Year")) %>%
   filter(YEAR>=2012 & YEAR<=2020) %>%
   mutate(inOMNIBUSLand = ifelse(is.na(inOMNIBUSLand), 0, inOMNIBUSLand),
-         inOMNIBUSRev = ifelse(is.na(inOMNIBUSRev), 0, inOMNIBUSRev),
-         )
+         inOMNIBUSRev_nom = ifelse(is.na(inOMNIBUSRev), 0, inOMNIBUSRev),
+         ) %>%
+    mutate(inOMNIBUSRev=inOMNIBUSRev/GDPDEF)
+
 # Not red crab, is this a parsing problem with species names?
 
 
