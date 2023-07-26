@@ -90,7 +90,7 @@ desktopUse = ifelse(unname(Sys.info()["sysname"]) == "Windows", TRUE, FALSE)
 #############################################################################
 # versioning options
 todaysdate <- Sys.Date()
-todaysdate<-"2022-07-01"
+todaysdate<-"2023-07-25"
 #############################################################################
 # Paths, names, and locations of inputs and outputs
 offshoreWindpath<-file.path(network_location,"home2","mlee","offshoreWind")
@@ -1741,7 +1741,7 @@ kbl(Directly_Regulated_Entities_table, digits=0,booktabs=T, align=c("l",rep('r',
       row_spec(0,bold=TRUE) 
 ```
 
-Table \ref{tab:Directly_Regulated_Entities} describes numbers of directly regulated entities, their main activities, and their revenues from various sources. The distribution of gross receipts for both classes is highly right-skewed: there are many firms with a small to moderate amount of gross receipts and a handful of firms with much more economic activity. This results in the average receipts being higher than the 75$^th$ percentile of gross receipts for these two groups.
+Table \ref{tab:Directly_Regulated_Entities} describes numbers of directly regulated entities, their main activities, and their revenues from various sources. The distribution of gross receipts for both classes is highly right-skewed: there are many firms with a small to moderate amount of gross receipts and a handful of firms with much more economic activity. This results in the average receipts being higher than the 75$^{th}$ percentile of gross receipts for these two groups.
 
 SBA mandates the use of the three most recent years of data to determine whether an entity is small or large.  We have done so.  Using this time period (2019-2021) to describe the importance of NCSMNM to these firms is not appropriate, because the area was not open to fishing for much of this time.  Therefore, the fishing activity during the 2012-2016 time period are used characterize the importance of NCSMNM.  Table \ref{tab:Firm_average_in_Area} describes the Gross Receipts from all sources and from just within the NCSMNM addition from 2012-2016. Table \ref{tab:AnyInside} describes the Gross Receipts from all sources and from just within the NCSMNM addition only for firms that fished inside the NCSMNM addition area.  None of the "For-Hire" firms derived any commercial fishing revenue from inside the NCSMNM addition area; therefore these firms are excluded from Table \ref{tab:Firm_average_in_Area}.
 
@@ -1822,7 +1822,7 @@ kbl(DRE_2012_2016InsideOnly, digits=0,booktabs=T,  align=c("l",rep('r',times=6))
 
 ### Percentage of Revenue by Firm
 
-We also plot the percentage of each small firm's total commercial fishing revenue derived from inside the NCSMNM addition area (Figure \ref{fig:percent_of_revenue_by_firm}).  Only small firms with revenue from the area are included in the plots; these plots are companions to Table \ref{tab:AnyInside}.  The area inside the boxes of indicate capture the 25$^th$-75$^th$ percentiles, indicating that,  after excluding firms that do not use the NCSMNM addition area, most small firms derive a small proportion of their total revenue from the NCSMNM addition area. 
+We also plot the percentage of each small firm's total commercial fishing revenue derived from inside the NCSMNM addition area (Figure \ref{fig:percent_of_revenue_by_firm}).  Only small firms with revenue from the area are included in the plots; these plots are companions to Table \ref{tab:AnyInside}.  The area inside the boxes of indicate capture the 25$^{th}$-75$^{th}$ percentiles, indicating that,  after excluding firms that do not use the NCSMNM addition area, most small firms derive a small proportion of their total revenue from the NCSMNM addition area. 
 
 ```{r percent_of_revenue_by_firm, eval = T, fig.cap="\\label{fig:percent_of_revenue_by_firm} Annual firm revenue percentage boxplots, only small firms with some activity inside NCSMNM Addition"}  
 
