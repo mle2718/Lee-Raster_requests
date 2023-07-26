@@ -350,7 +350,7 @@ area_adjective <- ifelse(area_adjective!= "" && str_sub(area_adjective,-1,-1) !=
 a_or_an <- ifelse(area_adjective == "" || tolower(substr(area_adjective, start = 1, stop = 1)) == "a", " an ", " a ")
 
 # Mistype Error Checking:
-if ((base_year %in% 1947:2021 == FALSE)) {stop("Base year not between 2020 and 1947 or not given..")}
+if ((base_year %in% 1947:2022 == FALSE)) {stop("Base year not between 2022 and 1947 or not given..")}
 if ((base_quarter %in%  c("Q1", "Q2", "Q3", "Q4", "") == FALSE)) {stop("Base Quarter not written as Q1, Q2, Q3, Q4..")}
 if (deflate_by == "year") {message("Deflating by ", base_year, " dollars..")}
 if (deflate_by == "quarter") {message("Deflating by ", base_year, ", ", base_quarter, " dollars..")}
@@ -364,8 +364,8 @@ if (overlap_data_source == "oracle" | query_dmis_table == TRUE | query_rec_table
   }
 }
 if (overlap_data_source == "folder") {
-  if (!dir.exists(additonal_year_overlap_data_path) | !dir.exists(overlap_data_path)) {
-  stop("Not connected to shared drive or overlap_data_path or additonal_year_overlap_data_path folder doesn't exist") # checks that the overlap path exists to see if the user has entered the password for the shared drive
+  if (!dir.exists(overlap_data_path)) {
+  stop("Not connected to shared drive or overlap_data_path") # checks that the overlap path exists to see if the user has entered the password for the shared drive
   }
 }
 
