@@ -389,7 +389,7 @@ ptm.SCRIPT = Sys.time() #bench marking
 ```
 
  <!----  The create_connection_if_querying chunk creates an ODBC connection usion RODBC. --->
-```{r create_connection_if_querying, eval = eval_create_connection}  
+```{r create_connection_if_querying, eval = eval_create_connection,include=FALSE}  
 # this should stop errors from occuring in the case that Oracle credentials are not changed from defaults 
 
   CONN <- RODBC::odbcConnect(dsn=oracle_server, uid=oracle_username, pwd=oracle_password, believeNRows=FALSE)
@@ -491,7 +491,7 @@ VTR_REC <- VTR_REC %>% # fix data
 
  <!----  The query_CFDBS chunk landings at the species level, then merges it to a modified species-fmp table. --->
 
-```{r pull_cfdbs }
+```{r pull_cfdbs, include=FALSE }
 try(odbcClose(CONN))
 
   CONN <- RODBC::odbcConnect(dsn=oracle_server, uid=oracle_username, pwd=oracle_password, believeNRows=FALSE)
