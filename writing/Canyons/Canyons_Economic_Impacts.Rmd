@@ -167,7 +167,7 @@ END.YEAR<-2021
 
 deflate_by <- "year"
 #base year and/or quarter for GDP Deflator
-base_year = 2022 # base year for GDP deflator - Maximum = 2020, Minimum = 1947  - max(GDPDEF_quarterly$Year)
+base_year = 2022 # base year for GDP deflator - Maximum = 2022, Minimum = 1947  - max(GDPDEF_quarterly$Year)
 base_quarter = "" # base quarter for GDP deflator e.g. "Q1", "Q2" etc. Maximum = Q1 of 2020, Minimum = Q1 of 1947 - leave blank to query by year
 
 numyear <- offshoreWind::proper(offshoreWind::numbers2words(as.integer(length(START.YEAR:END.YEAR))))
@@ -243,7 +243,7 @@ numclasses <- 5
 
 # Data_Process_Switch<-TRUE will extract and process data. This takes a while, so set to FALSE after you run the first time.
 Data_Process_Switch<-FALSE
-Data_Process_Switch<-TRUE
+#Data_Process_Switch<-TRUE
 query_dmis_table = FALSE # query old or new dmis table from Oracle? True = yes, False = use flatfile in data/
 query_rec_table = FALSE # query rec table from Oracle? True = yes, False = use flatfile in data/
 query_permits = TRUE # query permit ids for vtr from Oracle? True = yes, False = use flatfile in data/
@@ -535,15 +535,27 @@ allZones <- gsub("(?<=\\b)([a-z])", "\\U\\1", gsub("_"," ", allZones1), perl=TRU
 CFDBS_FMP<-readRDS(file= file.path(output_revenue, paste0("CFDBS_FMP.Rds")))
 # Drop the clam/quahog from CFDBS_FMP and substitute in the totals from FIN
 
+GDP_FILL<-CFDBS_FMP%>%
+  ungroup %>%
+  select(YEAR,GDPDEF) %>%
+  distinct()
+
+
 CFDBS_FMP <-CFDBS_FMP %>%
   filter(FMP!="Surfclam, Ocean Quahog")%>%
   bind_rows(SCOQ_swap) %>%
   left_join(Omnibus, by=c("FMP"="FMP", "YEAR"="Year")) %>%
   filter(YEAR>=2012 & YEAR<=2020) %>%
-  mutate(inOMNIBUSLand = ifelse(is.na(inOMNIBUSLand), 0, inOMNIBUSLand),
+  select(-c(GDPDEF))
+
+CFDBS_FMP <-CFDBS_FMP %>%
+    left_join(GDP_FILL, by=c("YEAR"="YEAR")) %>%
+    mutate(inOMNIBUSLand = ifelse(is.na(inOMNIBUSLand), 0, inOMNIBUSLand),
          inOMNIBUSRev_nom = ifelse(is.na(inOMNIBUSRev), 0, inOMNIBUSRev),
-         ) %>%
-    mutate(inOMNIBUSRev=inOMNIBUSRev/GDPDEF)
+         inOMNIBUSRev=ifelse(is.na(inOMNIBUSRev),0,inOMNIBUSRev/GDPDEF)
+         )
+# This isn't working because of the way i've left_joined..there are NA's for GDPDEF also. 
+
 
 # Not red crab, is this a parsing problem with species names?
 
@@ -725,7 +737,7 @@ Baseline_rev <- CFDBS_FMP %>%
   #mutate(`Revenue Inside GB Deep-Sea Coral` = ifelse(FMP == "Red Crab", '(C)',`Revenue Inside GB Deep-Sea Coral`))
 
 
-kbl(Baseline_rev, booktabs=T,  align=c("l",rep('r',times=4)), format.args=list(big.mark=','), digits=3, caption = "Baseline Annual Regional Landings (millions of pounds) and Value (Millions of Real 2020 USD) are derived from average 2017-2020 dealer reports.  Revenue derived from the GB Deep Sea Coral Protection Area during this time period is also presented to illustrate the magnitude of fishing that occured in this area that is currently closed to commercial fishing.")  %>%
+kbl(Baseline_rev, booktabs=T,  align=c("l",rep('r',times=4)), format.args=list(big.mark=','), digits=3, caption = "Baseline Annual Regional Landings (millions of pounds) and Value (Millions of Real 2022 USD) are derived from average 2017-2020 dealer reports.  Revenue derived from the GB Deep Sea Coral Protection Area during this time period is also presented to illustrate the magnitude of fishing that occured in this area that is currently closed to commercial fishing.")  %>%
       kable_styling(full_width = T) %>% 
       row_spec(0,bold=TRUE) %>%
       row_spec(nrow(Baseline_rev),bold=T)
@@ -733,7 +745,7 @@ kbl(Baseline_rev, booktabs=T,  align=c("l",rep('r',times=4)), format.args=list(b
 ```
 
 
-```{r GB_DSC, out.width = "40%", fig.show='hold',fig.align="center", fig.cap="\\label{fig:GB_Deep_Sea_Coral} Revenue in real 2020 USD (left) and percentage terms (right) , by FMP, derived from the Georges Bank Deep-Sea Coral Protection Area.", eval=FALSE}
+```{r GB_DSC, out.width = "40%", fig.show='hold',fig.align="center", fig.cap="\\label{fig:GB_Deep_Sea_Coral} Revenue in real 2022 USD (left) and percentage terms (right) , by FMP, derived from the Georges Bank Deep-Sea Coral Protection Area.", eval=FALSE}
 knitr::include_graphics(here("writing","Canyons",c("revenue_GBCoral.png","pct_revenue_GBCoral.png")))
 ```
 
@@ -754,7 +766,7 @@ Some types of gear (say midwater trawl or handline) has minimal effects on the o
 
 --->
 
-We project the gross revenues and landings that would occur inside the NCSMNM addition area.  We use commercial fishing data based on vessel trip reports from  `r START.YEAR` - `r END.YEAR` to make this characterization. This time period is selected because the changing status of fishing makes data after `r END.YEAR` less useful for characterizing fishing activity if the NCSMNM were reopened.   These projected landings and revenues were constructed using the methods described in [@DePiper2014; @Benjamin2018] and were also used in a he similar analysis in support of the NEFMC's Habitat Omnibus Amendment 2 [-@NEFMC_habitat_2016_V6]. In brief, fishing vessels report the location (latitude and longitude) where the majority of their fishing effort was located. Fishing activity does not actually occur at a single point in the ocean.  A model, based on data collected through the observer program is used to account for this by allocating the fishing activity over a more realistic area. The amount of allocated effort that occurs inside the NCSMNM addition over the `r START.YEAR` to `r END.YEAR` period is used to construct projected revenues and landings that would occur if the NCSMNM addition was reopened to commercial fishing.
+We project the gross revenues and landings that would occur inside the NCSMNM addition area.  We use commercial fishing data based on vessel trip reports from  `r START.YEAR` - `r END.YEAR` to make this characterization. This time period is selected because the changing status of fishing makes data after `r END.YEAR` less useful for characterizing fishing activity if the NCSMNM were reopened.   These projected landings and revenues were constructed using the methods described in [@DePiper2014; @Benjamin2018] and were also used in a he similar analysis in support of the NEFMC's Habitat Omnibus Amendment 2 [-@NEFMC_habitat_2016_V6]. In brief, fishing vessels report the location (latitude and longitude) where the majority of their fishing effort was located. Fishing activity does not actually occur at a single point in the ocean.  A model, based on data collected through the observer program, is used to account for this by allocating the fishing activity over a more realistic area based on gear used, days away from port, and other factor . The amount of allocated effort that occurs inside the NCSMNM addition over the `r START.YEAR` to `r END.YEAR` period is used to construct projected revenues and landings that would occur if the NCSMNM addition was reopened to commercial fishing.
 
 These projections *under-estimate* fishing activity attributable to the lobster fishery and pot/trap gears because vessel operators that hold a lobster permit and no other federal permit are not required to fill out vessel trip reports.  Of the 113 fishing vessels with an Area 3 lobster permit in 2018, 90 were required to file VTRs because they held other Northeast Region permits.
 
@@ -1101,7 +1113,7 @@ allyrrev_table <-allyrrev_table %>%
 #names(allyrrev_table)[names(allyrrev_table) == "All Year Revenue"] <- paste0("Average Projected Revenue")
 
 
-kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=2)), caption = "Projected annual commercial landings (pounds) and revenue  (Real USD) that would occur in the NCSMNM addition if it was reopened to fishing based on 2012-2016 patterns of fishing.")  %>%
+kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=2)), caption = "Projected annual commercial landings (pounds) and revenue  (Real USD) that would occur in the NCSMNM addition if it was reopened to fishing based on 2012-2016 patterns of fishing. These projections likely underestimate the true increases in lobster activity and overestimate the increases in landings and benefits if the NCSMNM Addition were opened (see accompanying text).")  %>%
       kable_styling(full_width = T) %>% 
       row_spec(0,bold=TRUE)  %>%
       row_spec(nrow(allyrland_table),bold=T)
@@ -1110,7 +1122,7 @@ kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=2)), caption = "Proje
 ```
 
 
-```{r top_fmp_landings_plots, eval = top_fmp_section, fig.cap="\\label{fig:top_fmp_landings_plots}Landings by FMP, Northeast Canyons and Seamounts addition Area"} 
+```{r top_fmp_landings_plots, eval = top_fmp_section, fig.cap="\\label{fig:top_fmp_landings_plots}Landings by FMP, Northeast Canyons and Seamounts addition Area.  These likely underestimate the true increases in lobster activity and overestimate the increases in total landings that would occur if the NCSMNM Addition were opened (see accompanying text)."} 
 lp <- ggplot(topFMP, aes(x = Year, y = yfa_land/1000000, fill = FMP)) +
   guides(fill=guide_legend(title=NULL, reverse = TRUE)) +
   geom_col(width=0.4) +
@@ -1144,7 +1156,7 @@ ggsave(filename = file.path(output_ftopfmp, paste0("Top5FMPLand_",substr(broadzo
 rm(lp) # garbage collection - free up memory
 ```
 
-```{r top_fmp_revenue_figure, eval = top_fmp_section, fig.cap="\\label{fig:top_fmp_revenue_figure} Revenue (Real 2020USD)  by FMP, Northeast Canyons and Seamounts Addition Area."} 
+```{r top_fmp_revenue_figure, eval = top_fmp_section, fig.cap="\\label{fig:top_fmp_revenue_figure} Revenue (Real USD)  by FMP, Northeast Canyons and Seamounts Addition Area. These likely underestimate the true increases in lobster activity and overestimate the increases in total revenue that would occur if the NCSMNM Addition were opened (see accompanying text)."} 
 
 
 #######################################################################################
@@ -1409,7 +1421,7 @@ allyrrev_table <-allyrrev_table %>%
   left_join(allyrland_table, by="Gear Type") %>%
   relocate(`Average Projected  Revenue`, .after=last_col()) 
 
-kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=2)), caption = "Projected commercial landings (pounds) and revenue that would occur in the NCSMNM addition if it was reopened to fishing based on 2012-2016 fishing patterns.")  %>%
+kbl(allyrrev_table, booktabs=T,  align=c("l",rep('r',times=2)), caption = "Projected commercial landings (pounds) and revenue that would occur in the NCSMNM addition if it was reopened to fishing based on 2012-2016 fishing patterns. These likely underestimate the true increases in pot activity and overestimate the increases in total landings and revenue that would occur if the NCSMNM Addition were opened (see accompanying text).")  %>%
       kable_styling(full_width = T) %>%
       row_spec(nrow(allyrrev_table),bold=T) %>% 
       row_spec(0,bold=TRUE) 
@@ -1451,7 +1463,7 @@ arrange(desc(REVENUE)) %>%
 names(Total_REV)[names(Total_REV) == "REVENUE"] <- paste0(numyear, " Year Average Revenue")
 names(Total_REV)[names(Total_REV) == "QTYKEPT"] <- paste0(numyear, " Year Average Landings")
 
-kbl(Total_REV, booktabs=T,  align=c("l",rep('r',times=2)), caption = "2012-2016 Year Average Landings (Millions of Pounds) and Revenue (Millions of 2020 Dollars), All Areas")  %>%
+kbl(Total_REV, booktabs=T,  align=c("l",rep('r',times=2)), caption = "2012-2016 Year Average Landings (Millions of Pounds) and Revenue (Millions of 2022 Dollars), All Areas")  %>%
       kable_styling(full_width = T) %>%
       row_spec(nrow(Total_REV),bold=T)  %>% 
       row_spec(0,bold=TRUE) %>%
@@ -1465,7 +1477,7 @@ We note that American Lobster and Red Crab fisheries would not be impacted unil 
 
 
 
-```{r landings_plot_by_gear, eval = select_gear_section,  fig.cap="\\label{fig:landings_gear_plot} Landings by Gear, Northeast Canyons and Seamounts addition Area"}  
+```{r landings_plot_by_gear, eval = select_gear_section,  fig.cap="\\label{fig:landings_gear_plot} Landings by Gear, Northeast Canyons and Seamounts addition Area.  These likely underestimate the true increases in pot  activity and overestimate the increases in total landings that would occur if the NCSMNM Addition were opened (see accompanying text)."}  
 
 # plot
 lp <- ggplot(sGear_TypeArea, aes(x = Year, y = yfa_land/1000000, fill=Gear_Type)) +
@@ -1495,7 +1507,7 @@ print(lp)
 
 ```
 
-```{r revenue_plot_by_gear, eval = select_gear_section, fig.cap="\\label{fig:revenue_gear_plot}Revenue by Gear, Northeast Canyons and Seamounts addition Area"}  
+```{r revenue_plot_by_gear, eval = select_gear_section, fig.cap="\\label{fig:revenue_gear_plot}Revenue by Gear, Northeast Canyons and Seamounts addition Area. These likely underestimate the true increases in pot  activity and overestimate the increases in total revenue that would occur if the NCSMNM Addition were opened (see accompanying text)."}  
 ###################################################################
 # revenue plot and table
 
@@ -1581,9 +1593,9 @@ An Initial Regulatory Flexibility Analysis (IRFA; section [Regulatory-Flexibilit
 
 ## Regulatory Impact Analysis (E.O. 12866)
 
-The purpose of Executive Order 12866 (E.O. 12866, 58 FR 51735, October 4, 1993) is to enhance planning and coordination with respect to new and existing regulations. This E.O. requires the Office of Management and Budget (OMB) to review regulatory programs that are considered to be “significant.” E.O. 12866 requires a review of proposed regulations to determine whether or not the expected effects would be significant, where a significant action is any regulatory action that may:
+The purpose of Executive Order 12866 (E.O. 12866, 58 FR 51735, October 4, 1993), as amended by E.O. 14094 (88 FR 21879, April 6, 2023) is to enhance planning and coordination with respect to new and existing regulations This E.O. requires the Office of Management and Budget (OMB) to review regulatory programs that are considered to be “significant.” E.O. 12866 requires a review of proposed regulations to determine whether or not the expected effects would be significant, where a significant action is any regulatory action that may:
 
-*  Have an annual effect on the economy of $100 million or more, or adversely affect in a material way the economy, a sector of the economy, productivity, jobs, the environment, public health or safety, or State, local, or tribal governments or communities;
+*	Have an annual effect on the economy of $200 million or more, or adversely affect in a material way the economy, a sector of the economy, productivity, jobs, the environment, public health or safety, or State, local, or tribal governments or communities;
 *  Create a serious inconsistency or otherwise interfere with an action taken or planned by another agency;
 *  Materially alter the budgetary impact of entitlements, grants, user fees, or loan programs or the rights and obligations of recipients thereof; or
 *  Raise novel legal or policy issues arising out of legal mandates, the President’s priorities, or the principles set for the Executive Order.
