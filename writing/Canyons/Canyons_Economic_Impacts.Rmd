@@ -1802,7 +1802,7 @@ kbl(DRE_2012_2016Firms, digits=0,booktabs=T,  align=c("l",rep('r',times=6)), cap
       row_spec(0,bold=TRUE) 
 ```
 
-Tables \ref{tab:Firm_average_in_Area}  and \ref{tab:AnyInside} suggest that the NCSMNM addition area are not highly used by fishing firms.  Every year, approximately small 100 fishing firms (approximately 10\% of small firms) derived some fishing revenue from the NCSMNM addition area (Table \ref{tab:AnyInside}).  Nearly all large firms were active in the NCSMNM addition area.  The large firms derived more fishing revenues from the NCSMNM addition than the small firms, although these were a smaller fraction of gross reciepts.  Compliance costs, measured as foregone revenue from this area, are expected to be low.  On average, firms derived less than 1\% of annual fishing revenue from this area, and typically substantially less than this.  
+Tables \ref{tab:Firm_average_in_Area}  and \ref{tab:AnyInside} suggest that the NCSMNM addition area are not highly used by fishing firms.  Every year, approximately small 100 fishing firms (approximately 10\% of small firms) derived some fishing revenue from the NCSMNM addition area (Table \ref{tab:AnyInside}).  Nearly all large firms were active in the NCSMNM addition area.  The large firms derived more fishing revenues from the NCSMNM addition than the small firms, although these were a smaller fraction of gross receipts.  Compliance costs, measured as foregone revenue from this area, are expected to be low.  On average, firms derived less than 1\% of annual fishing revenue from this area, and typically substantially less than this.  
 
 ```{r AnyInside}
 
